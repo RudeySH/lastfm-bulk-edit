@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.1.1
+// @version     0.1.2
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -116,10 +116,6 @@ function appendStyle() {
 function appendEditScrobbleMenuItems(element) {
     if (!document.URL.startsWith(libraryURL)) {
         return; // current page is not the user's library
-    }
-    
-    if (!document.querySelector('.user-status-subscriber')) {
-        return; // user is not a Last.fm Pro subscriber
     }
 
     const tables = element.querySelectorAll('table.chartlist');
