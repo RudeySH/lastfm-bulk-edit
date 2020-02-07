@@ -5,7 +5,7 @@
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @homepageURL https://github.com/RudeySH/lastfm-bulk-edit
-// @icon        https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/master/img/icon.svg
+// @icon        https://www.last.fm/static/images/lastfm_avatar_twitter.png
 // @updateURL   https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/master/lastfm-bulk-edit.user.js
 // @downloadURL https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/master/lastfm-bulk-edit.user.js
 // @supportURL  https://github.com/RudeySH/lastfm-bulk-edit/issues
