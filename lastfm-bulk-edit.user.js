@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.1.2
+// @version     0.1.3
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -25,8 +25,11 @@ if (!authLink) {
 }
 
 const libraryURL = `${authLink.href}/library`;
-const albumRegExp = new RegExp(`^${libraryURL}/music/[^/]+/[^+][^/]*$`);
-const artistRegExp = new RegExp(`^${libraryURL}/music/[^/]+$`);
+
+// https://regex101.com/r/izJpjE/1
+const albumRegExp = new RegExp(`^${libraryURL}\/music(\/\+[^\/]*)*(\/[^\+][^\/]*){2}$`);
+const artistRegExp = new RegExp(`^${libraryURL}\/music(\/\+[^\/]*)*(\/[^\+][^\/]*){1}$`);
+
 const domParser = new DOMParser();
 
 const editScrobbleMenuItemTemplate = document.createElement('template');
