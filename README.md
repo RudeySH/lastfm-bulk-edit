@@ -71,7 +71,7 @@ Userscript managers are browser extensions that install and run userscripts for 
 
 ### Why is Greasemonkey not supported?
 
-Last.fm Bulk Edit uses [The Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API) to post form data to edit scrobbles. Greasemonkey has some issues with the Fetch API:
+Last.fm Bulk Edit uses the [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API) to post form data to edit scrobbles. Greasemonkey has some issues with the Fetch API:
 - https://github.com/greasemonkey/greasemonkey/issues/2647
 - https://github.com/greasemonkey/greasemonkey/issues/3071
 - https://github.com/greasemonkey/greasemonkey/issues/3072
