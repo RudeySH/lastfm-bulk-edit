@@ -1,2 +1,116 @@
-# lastfm-bulk-edit
-Bulk edit your scrobbles for any artist or album on Last.fm at once.
+# Last.fm Bulk Edit
+
+Bulk edit your scrobbles for any artist, album or track on [Last.fm](https://www.last.fm/) at once.
+
+
+## Instructions
+1. Upgrade to [Last.fm Pro](https://www.last.fm/pro).
+2. Install a userscript manager: [Tampermonkey](https://tampermonkey.net/). (Greasemonkey is currently not supported, see FAQ.)
+3. Install this userscript: [Last.fm Bulk Edit](https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/master/lastfm-bulk-edit.user.js).
+4. Go to your [Last.fm library](https://www.last.fm/user/_/library/artists).
+5. Use the new "Edit scrobbles" menu item like in the examples below.
+
+
+## Examples
+
+### Merging albums, fixing album names, and removing albums
+
+![](img/fix-albums.gif)
+
+
+### Replacing an incorrect artist name with Last.fm's auto-corrected name
+
+This GIF also demonstrates that the album artist name is kept in sync when changing the artist name.
+
+![](img/album-artist-sync.gif)
+
+
+## Frequently asked questions
+
+### Why did my edit not save properly?
+
+There could be many reasons for this. Sometimes Last.fm servers are too busy, try again later. Keep in mind that it is not possible to change just the upper or lower casing of names, [due to how these are stored in Last.fm's database](https://getsatisfaction.com/lastfm/topics/website-update-12-march-editing-scrobbles-subscriber-feature). It appears this extends to hyphens as well, for example you can't always change "Blink 182" to "blink-182".
+
+### How do I get in contact with you?
+
+If you believe you have found a bug, feel free to open a GitHub issue. For general support or discussion, hit me up on Discord, you'll find me in the [Last.fm Discord](https://discord.gg/6aTeg3u) (Rudey#0001).
+
+
+### Why do I need a Last.fm Pro subscription?
+
+[Last.fm Pro](https://www.last.fm/pro) enables subscribers to edit scrobbles, one track at a time<sup id="a1">[1](#f1)</sup>. Last.fm Bulk Edit uses this feature behind the scenes to perform bulk editing.
+
+<strong id="f1">1</strong>: Last.fm only lets you bulk edit an exact artist, track, album and album artist combination. See the next paragraph for more information.
+
+
+### How is this different from Last.fm's bulk edit checkbox?
+
+When you edit a scrobble on Last.fm, you'll see this checkbox:
+
+![A screenshot of Last.fm's bulk edit checkbox](img/bulk-edit.png)
+
+This checkbox lets you to bulk edit an exact artist, track, album and album artist combination. This often means you can't edit all scrobbles of a given track at once, because it is likely some scrobbles have a different album or album artist.
+
+Last.fm Bulk Edit lets you edit all scrobbles of a given track at once, regardless of differences between scrobbles in artist, album or album artist. Better yet, Last.fm Bulk Edit also lets you edit all scrobbles of an artist or album at once.
+
+
+### How is this different from the other batch edit userscript?
+
+The other userscript, [lastfm-batch-edit](https://github.com/danielrw7/lastfm-batch-edit), was created before Last.fm added the bulk edit checkbox. That userscript has similar limitations. It can't edit all scrobbles of an artist or album at once.
+
+
+### What are userscripts?
+
+Userscripts are programs that augment your browsing experience.
+For example, they can add features or enhancements to existing websites.
+Userscripts are not browser extensions. Instead, they can be enabled by a userscript manager.
+Userscript managers are browser extensions that install and run userscripts for you.
+
+[Tampermonkey](https://tampermonkey.net/) is the most popular userscript manager. Last.fm Bulk Edit currently only supports Tampermonkey.
+
+
+### Why is Greasemonkey not supported?
+
+Last.fm Bulk Edit uses [The Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API) to post form data to edit scrobbles. Greasemonkey has some issues with the Fetch API:
+- https://github.com/greasemonkey/greasemonkey/issues/2647
+- https://github.com/greasemonkey/greasemonkey/issues/3071
+- https://github.com/greasemonkey/greasemonkey/issues/3072
+
+
+### Why did you make this?
+
+Because it is easy to scrobble with bad metadata, but hard to fix it. Editing scrobbles one by one is a pain. Music streaming services like Spotify do not allow you to clean up tags, so there is no way to prevent it from happening in the first place.
+
+Redditors of [r/lastfm](https://www.reddit.com/r/lastfm) have expressed similar frustrations.
+
+[u/willguitar100 posted](https://www.reddit.com/r/lastfm/comments/azks0z/the_most_painful_thing_ive_noticed_in_my_lastfm/):
+
+> The most painful thing I've noticed in my last.fm yet. Apparently I used the wrong apostrophe.
+
+![](img/reddit/z9wuk5fq1dl21.png)
+
+[u/Cyreniac posted](https://www.reddit.com/r/lastfm/comments/ahbr4w/are_memes_allowed_here/):
+
+![](img/reddit/j2Vr-boauwYbLfmDJlVRoL74WiHeaiYjzWESXQMh3yk.jpg)
+
+[u/Bluegorilla101 posted](https://www.reddit.com/r/lastfm/comments/8ver9b/the_struggles_of_using_spotify_to_scrobble/):
+
+> The struggles of using Spotify to scrobble.
+
+![](img/reddit/n2rcyyfssf711.png)
+
+[u/tjdeignan posted](https://www.reddit.com/r/lastfm/comments/dagrtb/why/):
+
+![](img/reddit/ztpdkkp2jcp31.jpg)
+
+
+### Who are you?
+
+I'm Rudey. Check out [my Last.fm profile](https://www.last.fm/user/Rudey24).
+
+
+### How do I support Last.fm Bulk Edit?
+
+Star this repository on GitHub and spread the word! Here's a PayPal donate link:
+
+[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=QPVH74PGFEFTL&source=url)
