@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.1.3
+// @version     0.1.4
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -26,9 +26,9 @@ if (!authLink) {
 
 const libraryURL = `${authLink.href}/library`;
 
-// https://regex101.com/r/izJpjE/1
-const albumRegExp = new RegExp(`^${libraryURL}\/music(\/\+[^\/]*)*(\/[^\+][^\/]*){2}$`);
-const artistRegExp = new RegExp(`^${libraryURL}\/music(\/\+[^\/]*)*(\/[^\+][^\/]*){1}$`);
+// https://regex101.com/r/KwEMRx/1
+const albumRegExp  = new RegExp(`^${libraryURL}/music(\\+[^/]*)*(/[^+][^/]*){2}$`);
+const artistRegExp = new RegExp(`^${libraryURL}/music(\\+[^/]*)*(/[^+][^/]*){1}$`);
 
 const domParser = new DOMParser();
 
@@ -137,6 +137,8 @@ function appendEditScrobbleMenuItem(row) {
         return; // this is not an artist, album or track
     }
 
+    const urlType = getUrlType(link.href);
+
     // re-use template from outer scope
     const editScrobbleMenuItem = editScrobbleMenuItemTemplate.content.cloneNode(true);
 
@@ -164,7 +166,7 @@ function appendEditScrobbleMenuItem(row) {
     }
 
     async function onClick() {
-        await augmentEditScrobbleForm(link.href, scrobbleData);
+        await augmentEditScrobbleForm(urlType, scrobbleData);
         loadingModal.close();
     }
 
@@ -221,9 +223,7 @@ async function fetchScrobbleData(url, loadingModal, parentStep, parentDocument, 
         url = url.substr(0, indexOfQuery);
     }
 
-    const type = getUrlType(url);
-
-    if (type === 'artist') {
+    if (getUrlType(url) === 'artist') {
         url += '/+tracks'; // skip artist overview and go straight to the tracks
     }
 
@@ -367,12 +367,11 @@ function applyFormData(form, formData) {
 }
 
 // augments the default Edit Scrobble form to include new features
-async function augmentEditScrobbleForm(url, scrobbleData) {
+async function augmentEditScrobbleForm(urlType, scrobbleData) {
     const wrapper = await observeChildList(document.body, '.popup_wrapper');
     const popup = wrapper.querySelector('.popup_content');
     const title = popup.querySelector('.modal-title');
     const form = popup.querySelector('form[action$="/library/edit?edited-variation=library-track-scrobble"]');
-    const urlType = getUrlType(url);
 
     title.textContent = `Edit ${urlType[0].toUpperCase() + urlType.slice(1)} Scrobbles`;
 
