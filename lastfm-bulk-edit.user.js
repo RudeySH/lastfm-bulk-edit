@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.1.4
+// @version     0.1.5
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -155,6 +155,12 @@ function appendEditScrobbleMenuItem(row) {
 
         loadingModal = createLoadingModal();
         scrobbleData = await fetchScrobbleData(link.href, loadingModal);
+
+        if (scrobbleData.length === 0) {
+            loadingModal.close();
+            alert(`Last.fm reports you haven't listened to this ${urlType}.`);
+            return;
+        }
 
         // Last.fm expects form fields populated with a single scrobble
         applyFormData(form, scrobbleData[0]);
