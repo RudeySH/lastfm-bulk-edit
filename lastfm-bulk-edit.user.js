@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.1.0
+// @version     0.1.1
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -243,7 +243,7 @@ async function fetchScrobbleData(url, loadingModal, parentStep, parentDocument, 
 
         const table = fetchedDocument.querySelector('table.chartlist');
         if (!table) {
-            // sometimes a missing charlist is expected, other times it indicates a failure
+            // sometimes a missing chartlist is expected, other times it indicates a failure
             if (fetchedDocument.body.textContent.includes('There was a problem loading your')) {
                 abort();
             }
@@ -378,12 +378,11 @@ async function augmentEditScrobbleForm(url, scrobbleData) {
     title.textContent = `Edit ${urlType[0].toUpperCase() + urlType.slice(1)} Scrobbles`;
 
     // remove traces of the first scrobble that was used to initialize the form
+    form.removeChild(form.querySelector('.form-group--timestamp'));
     form.removeChild(form.elements['track_name_original']);
     form.removeChild(form.elements['artist_name_original']);
     form.removeChild(form.elements['album_name_original']);
     form.removeChild(form.elements['album_artist_name_original']);
-    const timestampFormGroup = form.querySelector('.form-group--timestamp');
-    form.removeChild(timestampFormGroup);
 
     const track_name_input = form.elements['track_name'];
     const artist_name_input = form.elements['artist_name'];
