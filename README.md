@@ -47,7 +47,7 @@ This GIF also demonstrates that the album artist name is kept in sync when chang
 
 ### Why did my edit not save properly?
 
-There could be many reasons for this. Sometimes Last.fm servers are too busy, try again later. Keep in mind that it is not possible to change just the upper or lower casing of names, [due to how these are stored in Last.fm's database](https://getsatisfaction.com/lastfm/topics/website-update-12-march-editing-scrobbles-subscriber-feature). It appears this extends to hyphens as well, for example you can't always change "Blink 182" to "blink-182".
+There could be many reasons for this. Sometimes Last.fm servers are too busy, try again later. Keep in mind that it is not possible to change just the upper or lower casing of names, [due to how these are stored in Last.fm's database](https://getsatisfaction.com/lastfm/topics/website-update-12-march-editing-scrobbles-subscriber-feature).
 
 
 ### How do I get in contact with you?
@@ -85,7 +85,7 @@ For example, they can add features or enhancements to existing websites.
 Userscripts are not browser extensions. Instead, they can be enabled by a userscript manager.
 Userscript managers are browser extensions that install and run userscripts for you.
 
-[Tampermonkey](https://tampermonkey.net/) is the most popular userscript manager. Last.fm Bulk Edit currently only supports Tampermonkey.
+[Violentmonkey](https://violentmonkey.github.io/) and [Tampermonkey](https://tampermonkey.net/) are the most popular userscript managers. Last.fm Bulk Edit currently only supports Violentmonkey and Tampermonkey.
 
 
 ### Why is Greasemonkey not supported?
