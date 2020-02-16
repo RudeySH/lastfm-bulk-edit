@@ -15,10 +15,21 @@ Bulk edit your scrobbles for any artist, album or track on [Last.fm](https://www
 
 ### Merging albums, fixing album names, and removing albums
 
+Go to any artist in your library. Click on the dropdown button next to any album, and select "Edit scrobbles". Wait for the dialog to load. Edit the track, artist, album or album artist to your desire, then click "Save edit".
+
 ![](img/fix-albums.gif)
 
 
+### Select which albums you want to edit when editing compilations
+
+Last.fm Bulk Edit will automatically detect when an album you're editing contains tracks that have been scrobbled on different albums as well. Depending on the track, that may or may not be correct, so you'll be able to select which albums get edited and which don't.
+
+![](img/compilations.gif)
+
+
 ### Replacing an incorrect artist name with Last.fm's auto-corrected name
+
+In this example, auto-corrections are still turned on, but the steps are roughly the same for when auto-corrections are turned off.
 
 This GIF also demonstrates that the album artist name is kept in sync when changing the artist name.
 
@@ -30,6 +41,7 @@ This GIF also demonstrates that the album artist name is kept in sync when chang
 ### Why did my edit not save properly?
 
 There could be many reasons for this. Sometimes Last.fm servers are too busy, try again later. Keep in mind that it is not possible to change just the upper or lower casing of names, [due to how these are stored in Last.fm's database](https://getsatisfaction.com/lastfm/topics/website-update-12-march-editing-scrobbles-subscriber-feature). It appears this extends to hyphens as well, for example you can't always change "Blink 182" to "blink-182".
+
 
 ### How do I get in contact with you?
 

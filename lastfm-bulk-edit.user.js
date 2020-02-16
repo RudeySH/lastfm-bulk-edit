@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.1.5
+// @version     0.2.0
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -11,6 +11,7 @@
 // @downloadURL https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/master/lastfm-bulk-edit.user.js
 // @supportURL  https://github.com/RudeySH/lastfm-bulk-edit/issues
 // @match       https://www.last.fm/*
+// @require     https://cdnjs.cloudflare.com/ajax/libs/he/1.2.0/he.min.js
 // ==/UserScript==
 
 'use strict';
@@ -42,32 +43,23 @@ editScrobbleMenuItemTemplate.innerHTML = `
             <input type="hidden" name="album_name" value="">
             <input type="hidden" name="album_artist_name" value="">
             <input type="hidden" name="timestamp" value="">
-            <button type="submit" class="mimic-link dropdown-menu-clickable-item more-item--edit">
+            <button type="button" class="mimic-link dropdown-menu-clickable-item more-item--edit">
                 Edit scrobbles
             </button>
+            <button type="submit" class="hidden"></button>
         </form>
     </li>`;
 
-const loadingModalTemplate = document.createElement('template');
-loadingModalTemplate.innerHTML = `
+const modalTemplate = document.createElement('template');
+modalTemplate.innerHTML = `
     <div class="popup_background"
         style="opacity: 0.8; visibility: visible; background-color: rgb(0, 0, 0); position: fixed; top: 0px; right: 0px; bottom: 0px; left: 0px;">
     </div>
-    <div class="popup_wrapper popup_wrapper_visible"
-        style="opacity: 1; visibility: visible; position: fixed; overflow: auto; width: 100%; height: 100%; top: 0px; left: 0px; text-align: center;">
-        <div class="modal-dialog popup_content" role="dialog" aria-labelledby="modal-label" data-popup-initialized="true"
-            aria-hidden="false"
-            style="opacity: 1; visibility: visible; pointer-events: auto; display: inline-block; outline: none; text-align: left; position: relative; vertical-align: middle;"
-            tabindex="-1">
+    <div class="popup_wrapper popup_wrapper_visible" style="opacity: 1; visibility: visible; position: fixed; overflow: auto; width: 100%; height: 100%; top: 0px; left: 0px; text-align: center;">
+        <div class="modal-dialog popup_content" role="dialog" aria-labelledby="modal-label" data-popup-initialized="true" aria-hidden="false" style="opacity: 1; visibility: visible; pointer-events: auto; display: inline-block; outline: none; text-align: left; position: relative; vertical-align: middle;" tabindex="-1">
             <div class="modal-content">
-                <h2 class="modal-title">
-                    Loading...
-                </h2>
-                <div class="modal-body">
-                    <div class="${namespace}-loading">
-                        <div class="${namespace}-progress">0%</div>
-                    </div>
-                </div>
+                <h2 class="modal-title"></h2>
+                <div class="modal-body"></div>
             </div>
         </div>
         <div class="popup_align" style="display: inline-block; vertical-align: middle; height: 100%;"></div>
@@ -105,12 +97,27 @@ function appendStyle() {
             cursor: pointer;
         }
 
+        .${namespace}-ellipsis {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .${namespace}-list {
+            column-count: 2;
+        }
+
         .${namespace}-loading {
             background: url("/static/images/loading_dark_light_64.gif") 50% 50% no-repeat;
             height: 64px;
             display: flex;
             justify-content: center;
             align-items: center;
+        }
+
+        .${namespace}-text-info {
+            color: #2b65d9;
         }`;
 
     document.head.appendChild(style);
@@ -137,76 +144,289 @@ function appendEditScrobbleMenuItem(row) {
         return; // this is not an artist, album or track
     }
 
-    const urlType = getUrlType(link.href);
+    const linkUrlType = getUrlType(link.href);
 
     // re-use template from outer scope
     const editScrobbleMenuItem = editScrobbleMenuItemTemplate.content.cloneNode(true);
 
     const form = editScrobbleMenuItem.querySelector('form');
-    const button = form.querySelector('button');
+    const button = form.querySelector('button[type="button"]');
+    const submitButton = form.querySelector('button[type="submit"]');
 
-    let loadingModal;
+    let allScrobbleData;
     let scrobbleData;
 
-    button.addEventListener('click', onFirstClick);
+    button.addEventListener('click', async () => {
+        if (!allScrobbleData) {
+            const loadingModal = createLoadingModal('Loading Scrobbles...', { display: 'percentage' });
+            allScrobbleData = await fetchScrobbleData(link.href, loadingModal);
+            loadingModal.hide();
+        }
 
-    async function onFirstClick(event) {
-        event.preventDefault();
+        scrobbleData = allScrobbleData;
 
-        loadingModal = createLoadingModal();
-        scrobbleData = await fetchScrobbleData(link.href, loadingModal);
+        // use JSON strings as album keys to uniquely identify combinations of album + album artists
+        // group scrobbles by album key
+        let scrobbleDataGroups = [...groupBy(allScrobbleData, s => JSON.stringify({
+            album_name: s.get('album_name') || '',
+            album_artist_name: s.get('album_artist_name') || ''
+        }))];
+
+        // sort groups by the amount of scrobbles
+        scrobbleDataGroups = scrobbleDataGroups.sort(([_key1, values1], [_key2, values2]) => values2.length - values1.length);
+
+        // when editing multiple albums album, show an album selection dialog first
+        if (scrobbleDataGroups.length >= 2) {
+            let defaultSelection = 'all';
+
+            // when the edit dialog was initiated from an album or album track, put that album first in the list
+            if (linkUrlType === 'album' || getUrlType(document.URL) === 'album') {
+                // grab the current album name and artist name from the DOM
+                const album_name = (linkUrlType === 'album'
+                    ? row.querySelector('.chartlist-name')
+                    : document.querySelector('.library-header-title')).textContent.trim();
+                const album_artist_name = (linkUrlType === 'album'
+                    ? document.querySelector('.library-header-title, .library-header-crumb')
+                    : document.querySelector('.text-colour-link')).textContent.trim();
+                const currentAlbumKey = JSON.stringify({ album_name, album_artist_name });
+
+                // put the current album first
+                scrobbleDataGroups = scrobbleDataGroups.sort(([key1], [key2]) => {
+                    if (key1 === currentAlbumKey) return -1;
+                    if (key2 === currentAlbumKey) return +1;
+                    return 0;
+                });
+
+                defaultSelection = 'first';
+            }
+
+            const disclaimer = `
+                <div class="alert alert-info">
+                    Scrobbles from this ${linkUrlType} are spread out across multiple albums.
+                    Select which albums you would like to edit.
+                    Deselect albums you would like to skip.
+                </div>`;
+
+            const elements = scrobbleDataGroups.map(([key, scrobbleData], index) => {
+                const firstScrobbleData = scrobbleData[0];
+                const album_name = firstScrobbleData.get('album_name');
+                const artist_name = firstScrobbleData.get('album_artist_name') || firstScrobbleData.get('artist_name');
+                const selectFirst = index === 0 && defaultSelection === 'first';
+
+                return `
+                    <div class="checkbox">
+                        <label>
+                            <input type="checkbox" name="key" value="${he.escape(key)}" ${selectFirst || defaultSelection === 'all' ? 'checked' : ''} />
+                            <strong title="${he.escape(album_name || '')}" class="${namespace}-ellipsis ${selectFirst ? `${namespace}-text-info` : ''}">
+                                ${album_name ? he.escape(album_name) : '<em>No Album</em>'}
+                            </strong>
+                            <div title="${he.escape(artist_name)}" class="${namespace}-ellipsis">
+                                ${he.escape(artist_name)}
+                            </div>
+                            <small>
+                                ${scrobbleData.length} scrobble${scrobbleData.length !== 1 ? 's' : ''}
+                            </small>
+                        </label>
+                    </div>`;
+            });
+
+            let formData;
+            try {
+                formData = await prompt('Select Albums To Edit', disclaimer, elements);
+            } catch (error) {
+                console.log(error);
+                return; // user canceled the album selection dialog
+            }
+
+            const selectedAlbumKeys = formData.getAll('key');
+
+            scrobbleData = flatten(scrobbleDataGroups
+                .filter(([key]) => selectedAlbumKeys.includes(key))
+                .map(([_, values]) => values));
+        }
 
         if (scrobbleData.length === 0) {
-            loadingModal.close();
-            alert(`Last.fm reports you haven't listened to this ${urlType}.`);
+            alert(`Last.fm reports you haven't listened to this ${linkUrlType}.`);
             return;
         }
 
-        // Last.fm expects form fields populated with a single scrobble
+        // use the first scrobble to trick Last.fm into fetching the Edit Scrobble modal
         applyFormData(form, scrobbleData[0]);
+        submitButton.click();
+    });
 
-        // done loading, click to open the Edit Scrobble dialog
-        this.removeEventListener('click', onFirstClick);
-        this.addEventListener('click', onClick);
-        this.click();
-    }
-
-    async function onClick() {
-        await augmentEditScrobbleForm(urlType, scrobbleData);
-        loadingModal.close();
-    }
+    submitButton.addEventListener('click', async () => {
+        const loadingModal = createLoadingModal('Waiting for Last.fm...');
+        await augmentEditScrobbleForm(linkUrlType, scrobbleData);
+        loadingModal.hide();
+    });
 
     // append new menu item to the DOM
     const menu = row.querySelector('.chartlist-more-menu');
     menu.insertBefore(editScrobbleMenuItem, menu.firstElementChild);
 }
 
-function createLoadingModal() {
-    // re-use template from outer scope
-    const loadingModal = loadingModalTemplate.content.cloneNode(true);
+// shows a form dialog and resolves it's promise on submit
+function prompt(title, disclaimer, elements) {
+    return new Promise((resolve, reject) => {
+        const form = document.createElement('form');
+        form.className = 'form-horizontal';
 
-    const progress = loadingModal.querySelector(`.${namespace}-progress`);
-    const steps = [];
+        const element = form.appendChild(document.createElement('div'));
+        element.className = 'form-disclaimer';
 
-    // append new loading modal to the DOM
-    const container = document.createElement('div');
-    container.appendChild(loadingModal);
-    document.body.appendChild(container);
+        if (disclaimer instanceof Node) {
+            element.appendChild(disclaimer);
+        } else {
+            element.innerHTML += disclaimer;
+        }
 
-    // expose API for completing steps and closing the modal
-    return {
-        steps,
-        completeStep: step => {
-            step.completed = true;
-            const completionRatio = getCompletionRatio(steps);
-            progress.textContent = Math.floor(completionRatio * 100) + '%';
-        },
-        close: () => {
-            if (container.parentNode) {
-                container.parentNode.removeChild(container);
+        const list = form.appendChild(document.createElement('ul'));
+        list.className = `${namespace}-list`;
+
+        for (const element of elements) {
+            const listItem = list.appendChild(document.createElement('li'));
+
+            if (element instanceof Node) {
+                listItem.appendChild(element);
+            } else {
+                listItem.innerHTML += element;
             }
         }
+
+        form.innerHTML += `
+            <div class="form-group form-group--submit">
+                <div class="form-submit">
+                    <button type="reset" class="btn-secondary">Cancel</button>
+                    <button type="submit" class="btn-primary">
+                        <span class="btn-inner">
+                            OK
+                        </span>
+                    </button>
+                </div>
+            </div>`;
+
+        const content = document.createElement('div');
+        content.className = 'content-form';
+        content.appendChild(form);
+
+        const modal = createModal(title, content, {
+            dismissible: true,
+            events: {
+                hide: reject
+            }
+        });
+
+        form.addEventListener('reset', modal.hide);
+        form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            resolve(new FormData(form));
+            modal.hide();
+        });
+
+        modal.show();
+    });
+}
+
+function createModal(title, body, options) {
+    // re-use template from outer scope
+    const fragment = modalTemplate.content.cloneNode(true);
+
+    const modalTitle = fragment.querySelector('.modal-title');
+    if (title instanceof Node) {
+        modalTitle.appendChild(title);
+    } else {
+        modalTitle.innerHTML = title;
     }
+
+    const modalBody = fragment.querySelector('.modal-body');
+    if (body instanceof Node) {
+        modalBody.appendChild(body);
+    } else {
+        modalBody.innerHTML = body;
+    }
+
+    const element = document.createElement('div');
+
+    if (options && options.dismissible) {
+        // create X button that closes the modal
+        const closeButton = document.createElement('button');
+        closeButton.className = 'modal-dismiss';
+        closeButton.textContent = 'Close';
+        closeButton.addEventListener('click', hide);
+
+        // append X button to DOM
+        const modalContent = fragment.querySelector('.modal-content');
+        modalContent.insertBefore(closeButton, modalContent.firstElementChild);
+
+        // close modal when user clicks outside modal
+        const popupWrapper = fragment.querySelector('.popup_wrapper');
+        popupWrapper.addEventListener('click', event => {
+            if (!modalContent.contains(event.target)) {
+                hide();
+            }
+        });
+    }
+
+    element.appendChild(fragment);
+
+    let addedClass = false;
+
+    function show() {
+        if (element.parentNode) return;
+        document.body.appendChild(element);
+
+        if (!document.documentElement.classList.contains('popup_visible')) {
+            document.documentElement.classList.add('popup_visible');
+            addedClass = true;
+        }
+    }
+
+    function hide() {
+        if (!element.parentNode) return;
+        element.parentNode.removeChild(element);
+
+        if (addedClass) {
+            document.documentElement.classList.remove('popup_visible');
+            addedClass = false;
+        }
+
+        if (options && options.events && options.events.hide) {
+            options.events.hide();
+        }
+    }
+
+    return { element, show, hide };
+}
+
+function createLoadingModal(title, options) {
+    const body = `
+        <div class="${namespace}-loading">
+            <div class="${namespace}-progress"></div>
+        </div>`;
+
+    const modal = createModal(title, body);
+    const progress = modal.element.querySelector(`.${namespace}-progress`);
+
+    // extend modal with custom properties
+    modal.steps = [];
+    modal.refreshProgress = () => {
+        switch (options && options.display) {
+            case 'count':
+                progress.textContent = `${modal.steps.filter(s => s.completed).length} / ${modal.steps.length}`;
+                break;
+
+            case 'percentage':
+                const completionRatio = getCompletionRatio(modal.steps);
+                progress.textContent = Math.floor(completionRatio * 100) + '%';
+                break;
+        }
+    };
+
+    modal.refreshProgress();
+    modal.show();
+
+    return modal;
 }
 
 // calculates the completion ratio from a tree of steps with weights and child steps
@@ -218,10 +438,8 @@ function getCompletionRatio(steps) {
 }
 
 // this is a recursive function that browses pages of artists, albums and tracks to gather scrobbles
-async function fetchScrobbleData(url, loadingModal, parentStep, parentDocument, parentURL) {
+async function fetchScrobbleData(url, loadingModal, parentStep) {
     if (!parentStep) parentStep = loadingModal;
-    if (!parentDocument) parentDocument = document;
-    if (!parentURL) parentURL = parentDocument.URL;
 
     // remove "?date_preset=LAST_365_DAYS", etc.
     const indexOfQuery = url.indexOf('?');
@@ -269,7 +487,7 @@ async function fetchScrobbleData(url, loadingModal, parentStep, parentDocument, 
             const link = row.querySelector('.chartlist-count-bar-link');
             if (link) {
                 // recursive call to the current function
-                return await fetchScrobbleData(link.href, loadingModal, step, fetchedDocument, url);
+                return await fetchScrobbleData(link.href, loadingModal, step);
             }
 
             // no link indicates we're at the scrobble overview
@@ -277,12 +495,6 @@ async function fetchScrobbleData(url, loadingModal, parentStep, parentDocument, 
             return new FormData(form);
         }, weightFunc);
     });
-
-    if (getUrlType(parentURL) === 'album') {
-        // fetching scrobbles of an album yields scrobbles from other albums as well, so apply a filter
-        const album_name = parentDocument.querySelector('.library-header-title').textContent.trim();
-        scrobbleData = scrobbleData.filter(s => s.get('album_name') === album_name);
-    }
 
     return scrobbleData;
 }
@@ -327,18 +539,20 @@ function abort() {
     if (aborting) return;
     aborting = true;
     alert('There was a problem loading your scrobbles, please try again later.');
-    window.location.reload();        
+    window.location.reload();
 }
 
 // series for loop that updates the loading percentage
 async function forEach(loadingModal, parentStep, array, callback, weightFunc) {
     const tuples = array.map(item => ({ item, step: { weight: weightFunc ? weightFunc(item) : 1, steps: [] } }));
     parentStep.steps.push(...tuples.map(tuple => tuple.step));
+    loadingModal.refreshProgress();
 
     const result = [];
     for (const tuple of tuples) {
         result.push(await callback(tuple.item, tuple.step));
-        loadingModal.completeStep(tuple.step);
+        tuple.step.completed = true;
+        loadingModal.refreshProgress();
     }
 
     return flatten(result);
@@ -348,10 +562,12 @@ async function forEach(loadingModal, parentStep, array, callback, weightFunc) {
 async function forEachParallel(loadingModal, parentStep, array, callback, weightFunc) {
     const tuples = array.map(item => ({ item, step: { weight: weightFunc ? weightFunc(item) : 1, steps: [] } }));
     parentStep.steps.push(...tuples.map(tuple => tuple.step));
+    loadingModal.refreshProgress();
 
     const result = await Promise.all(tuples.map(async tuple => {
         const result = await callback(tuple.item, tuple.step);
-        loadingModal.completeStep(tuple.step);
+        tuple.step.completed = true;
+        loadingModal.refreshProgress();
         return result;
     }));
 
@@ -399,23 +615,23 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
     augmentInput(urlType, scrobbleData, popup, album_artist_name_input, 'album artists');
 
     // keep album artist name in sync
-    if (!album_artist_name_input.disabled) {
-        let previousValue = artist_name_input.value;
-        artist_name_input.addEventListener('input', () => {
-            if (album_artist_name_input.value === previousValue) {
-                album_artist_name_input.value = artist_name_input.value;
-                album_artist_name_input.dispatchEvent(new Event('input'));
-            }
-            previousValue = artist_name_input.value;
-        });
-    } else {
+    let previousValue = artist_name_input.value;
+    artist_name_input.addEventListener('input', () => {
+        if (album_artist_name_input.value === previousValue) {
+            album_artist_name_input.value = artist_name_input.value;
+            album_artist_name_input.dispatchEvent(new Event('input'));
+        }
+        previousValue = artist_name_input.value;
+    });
+
+    if (album_artist_name_input.placeholder === 'Mixed') {
         const template = document.createElement('template');
         template.innerHTML = `
             <div class="form-group-success">
                 <div class="alert alert-info">
                     <p>Matching album artists will be kept in sync.</p>
                 </div>
-            </div>`
+            </div>`;
         artist_name_input.parentNode.insertBefore(template.content, artist_name_input.nextElementChild);
     }
 
@@ -441,32 +657,42 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
                     </label>
                 </div>
             </div>
-        </div>`
+        </div>`;
 
     editAllFormGroup = editAllFormGroupTemplate.content.cloneNode(true);
     form.insertBefore(editAllFormGroup, form.lastElementChild);
 
     // each exact track, artist, album and album artist combination is considered a distinct scrobble
-    const scrobbleMap = groupBy(scrobbleData, s => JSON.stringify({
+    const distinctGroups = groupBy(scrobbleData, s => JSON.stringify({
         track_name: s.get('track_name'),
         artist_name: s.get('artist_name'),
         album_name: s.get('album_name') || '',
         album_artist_name: s.get('album_artist_name') || ''
     }));
 
-    const distinctScrobbleData = [...scrobbleMap].map(([name, values]) => values[0]);
+    const distinctScrobbleData = [...distinctGroups].map(([name, values]) => values[0]);
 
     const submitButton = form.querySelector('button[type="submit"]');
     submitButton.addEventListener('click', async event => {
         event.preventDefault();
 
+        for (const element of form.elements) {
+            if (element.dataset.confirm && element.placeholder !== 'Mixed') {
+                if (confirm(element.dataset.confirm)) {
+                    delete element.dataset.confirm; // don't confirm again when resubmitting
+                } else {
+                    return; // stop submit
+                }
+            }
+        }
+
         const formData = new FormData(form);
         const formDataToSubmit = [];
 
-        const track_name = getMixedInputValue(form.elements['track_name']);
-        const artist_name = getMixedInputValue(form.elements['artist_name']);
-        const album_name = getMixedInputValue(form.elements['album_name']);
-        const album_artist_name = getMixedInputValue(form.elements['album_artist_name']);
+        const track_name = getMixedInputValue(track_name_input);
+        const artist_name = getMixedInputValue(artist_name_input);
+        const album_name = getMixedInputValue(album_name_input);
+        const album_artist_name = getMixedInputValue(album_artist_name_input);
 
         for (const originalData of distinctScrobbleData) {
             const track_name_original = originalData.get('track_name');
@@ -474,8 +700,8 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
             const album_name_original = originalData.get('album_name') || '';
             const album_artist_name_original = originalData.get('album_artist_name') || '';
 
-            // if the album artist field is disabled, use the old and new artist names to keep the album artist in sync
-            const album_artist_name_sync = album_artist_name_input.disabled && distinctScrobbleData.some(s => s.get('artist_name') === album_artist_name_original)
+            // if the album artist field is Mixed, use the old and new artist names to keep the album artist in sync
+            const album_artist_name_sync = album_artist_name_input.placeholder === 'Mixed' && distinctScrobbleData.some(s => s.get('artist_name') === album_artist_name_original)
                 ? artist_name
                 : album_artist_name;
 
@@ -527,7 +753,7 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
         const cancelButton = form.querySelector('button.js-close');
         cancelButton.click();
 
-        const loadingModal = createLoadingModal();
+        const loadingModal = createLoadingModal('Saving Edits...', { display: 'count' });
         const parentStep = loadingModal;
 
         // run edits in series, inconsistencies will arise if you use a parallel loop
@@ -549,8 +775,8 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
             }
         });
 
-        // Last.fm sometimes displays old data when reloading too fast, so wait 3 seconds
-        setTimeout(() => { window.location.reload(); }, 3000);
+        // Last.fm sometimes displays old data when reloading too fast, so wait 1 second
+        setTimeout(() => { window.location.reload(); }, 1000);
     });
 }
 
@@ -590,24 +816,7 @@ function augmentInput(urlType, scrobbleData, popup, input, plural) {
         abbr.title = groups.map(([key, values]) => `${values.length}x${tab}${key || ''}`).join('\n');
         input.parentNode.insertBefore(abbr, input.nextElementChild);
 
-        switch (input.name) {
-            case 'track_name':
-                // disable track field when editing an artist's or album's scrobbles
-                if (urlType !== 'track') {
-                    input.disabled = true;
-                    return;
-                }
-                break;
-
-            case 'album_name':
-            case 'album_artist_name':
-                // disable album and album artist fields when editing an artist's scrobbles and there are two or more scrobbled albums
-                if (urlType === 'artist' && new Set(scrobbleData.map(s => s.get('album_name')).filter(n => n !== null)).size >= 2) {    
-                    input.disabled = true;
-                    return;
-                }
-                break;
-        }
+        input.dataset.confirm = `You are about to merge scrobbles for ${groups.length} ${plural}. This cannot be undone. Would you like to continue?`;
     }
 
     // datalist: a native HTML5 autocomplete feature
@@ -671,7 +880,7 @@ function groupBy(array, keyFunc) {
 }
 
 function getMixedInputValue(input) {
-    return !input.disabled && input.placeholder !== 'Mixed' ? input.value : null;
+    return input.placeholder !== 'Mixed' ? input.value : null;
 }
 
 function cloneFormData(formData) {
