@@ -125,7 +125,7 @@ Redditors of [r/lastfm](https://www.reddit.com/r/lastfm) have expressed similar 
 
 ### Who are you?
 
-I'm Rudey. Check out [my Last.fm profile](https://www.last.fm/user/Rudey24).
+I'm Rudey. Check out [my Last.fm profile](https://www.last.fm/user/RudeySH).
 
 
 ### How do I support Last.fm Bulk Edit?
