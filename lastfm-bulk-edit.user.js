@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.2.0
+// @version     0.2.1
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -591,6 +591,10 @@ function applyFormData(form, formData) {
 // augments the default Edit Scrobble form to include new features
 async function augmentEditScrobbleForm(urlType, scrobbleData) {
     const wrapper = await observeChildList(document.body, '.popup_wrapper');
+
+    // wait 1 frame
+    await new Promise(resolve => setTimeout(() => { resolve(); }));
+
     const popup = wrapper.querySelector('.popup_content');
     const title = popup.querySelector('.modal-title');
     const form = popup.querySelector('form[action$="/library/edit?edited-variation=library-track-scrobble"]');
