@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.2.1
+// @version     0.2.2
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -186,7 +186,7 @@ function appendEditScrobbleMenuItem(row) {
                     ? row.querySelector('.chartlist-name')
                     : document.querySelector('.library-header-title')).textContent.trim();
                 const album_artist_name = (linkUrlType === 'album'
-                    ? document.querySelector('.library-header-title, .library-header-crumb')
+                    ? row.querySelector('.chartlist-artist') || document.querySelector('.library-header-title, .library-header-crumb')
                     : document.querySelector('.text-colour-link')).textContent.trim();
                 const currentAlbumKey = JSON.stringify({ album_name, album_artist_name });
 
