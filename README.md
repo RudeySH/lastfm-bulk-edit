@@ -52,7 +52,7 @@ There could be many reasons for this. Sometimes Last.fm servers are too busy, tr
 
 ### How do I get in contact with you?
 
-If you believe you have found a bug, feel free to open a GitHub issue. For general support or discussion, hit me up on Discord, you'll find me in the [Last.fm Discord](https://discord.gg/6aTeg3u) (Rudey#0001).
+If you believe you have found a bug, feel free to open a GitHub issue. For general support or discussion, hit me up on Discord, you'll find me in the [Last.fm Discord](https://discord.gg/6aTeg3u) (Rudey#5517).
 
 
 ### Why do I need a Last.fm Pro subscription?
