@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.2.3
+// @version     0.2.4
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -105,6 +105,10 @@ function appendStyle() {
             white-space: nowrap;
         }
 
+        .${namespace}-form-group-controls {
+            margin-left: 0 !important;
+        }
+
         .${namespace}-list {
             column-count: 2;
         }
@@ -201,39 +205,65 @@ function appendEditScrobbleMenuItem(row) {
                 defaultSelection = 'first';
             }
 
-            const disclaimer = `
-                <div class="alert alert-info">
-                    Scrobbles from this ${linkUrlType} are spread out across multiple albums.
-                    Select which albums you would like to edit.
-                    Deselect albums you would like to skip.
-                </div>`;
+            const body = document.createElement('div');
+            body.innerHTML = `
+                <div class="form-disclaimer">
+                    <div class="alert alert-info">
+                        Scrobbles from this ${linkUrlType} are spread out across multiple albums.
+                        Select which albums you would like to edit.
+                        Deselect albums you would like to skip.
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="form-group-controls ${namespace}-form-group-controls">
+                        <button type="button" class="btn-secondary" id="${namespace}-select-all">Select all</button>
+                        <button type="button" class="btn-secondary" id="${namespace}-deselect-all">Deselect all</button>
+                    </div>
+                </div>
+                <ul class="${namespace}-list">
+                    ${scrobbleDataGroups.map(([key, scrobbleData], index) => {
+                        const firstScrobbleData = scrobbleData[0];
+                        const album_name = firstScrobbleData.get('album_name');
+                        const artist_name = firstScrobbleData.get('album_artist_name') || firstScrobbleData.get('artist_name');
+                        const selectFirst = index === 0 && defaultSelection === 'first';
 
-            const elements = scrobbleDataGroups.map(([key, scrobbleData], index) => {
-                const firstScrobbleData = scrobbleData[0];
-                const album_name = firstScrobbleData.get('album_name');
-                const artist_name = firstScrobbleData.get('album_artist_name') || firstScrobbleData.get('artist_name');
-                const selectFirst = index === 0 && defaultSelection === 'first';
+                        return `
+                            <li>
+                                <div class="checkbox">
+                                    <label>
+                                        <input type="checkbox" name="key" value="${he.escape(key)}" ${selectFirst || defaultSelection === 'all' ? 'checked' : ''} />
+                                        <strong title="${he.escape(album_name || '')}" class="${namespace}-ellipsis ${selectFirst ? `${namespace}-text-info` : ''}">
+                                            ${album_name ? he.escape(album_name) : '<em>No Album</em>'}
+                                        </strong>
+                                        <div title="${he.escape(artist_name)}" class="${namespace}-ellipsis">
+                                            ${he.escape(artist_name)}
+                                        </div>
+                                        <small>
+                                            ${scrobbleData.length} scrobble${scrobbleData.length !== 1 ? 's' : ''}
+                                        </small>
+                                    </label>
+                                </div>
+                            </li>`;
+                    }).join('')}
+                </ul>`;
 
-                return `
-                    <div class="checkbox">
-                        <label>
-                            <input type="checkbox" name="key" value="${he.escape(key)}" ${selectFirst || defaultSelection === 'all' ? 'checked' : ''} />
-                            <strong title="${he.escape(album_name || '')}" class="${namespace}-ellipsis ${selectFirst ? `${namespace}-text-info` : ''}">
-                                ${album_name ? he.escape(album_name) : '<em>No Album</em>'}
-                            </strong>
-                            <div title="${he.escape(artist_name)}" class="${namespace}-ellipsis">
-                                ${he.escape(artist_name)}
-                            </div>
-                            <small>
-                                ${scrobbleData.length} scrobble${scrobbleData.length !== 1 ? 's' : ''}
-                            </small>
-                        </label>
-                    </div>`;
+            const checkboxes = body.querySelectorAll('input[type="checkbox"]');
+
+            body.querySelector(`#${namespace}-select-all`).addEventListener('click', () => {
+                for (const checkbox of checkboxes) {
+                    checkbox.checked = true;
+                }
+            });
+
+            body.querySelector(`#${namespace}-deselect-all`).addEventListener('click', () => {
+                for (const checkbox of checkboxes) {
+                    checkbox.checked = false;
+                }
             });
 
             let formData;
             try {
-                formData = await prompt('Select Albums To Edit', disclaimer, elements);
+                formData = await prompt('Select Albums To Edit', body);
             } catch (error) {
                 console.log(error);
                 return; // user canceled the album selection dialog
@@ -268,34 +298,18 @@ function appendEditScrobbleMenuItem(row) {
 }
 
 // shows a form dialog and resolves it's promise on submit
-function prompt(title, disclaimer, elements) {
+function prompt(title, body) {
     return new Promise((resolve, reject) => {
         const form = document.createElement('form');
         form.className = 'form-horizontal';
 
-        const element = form.appendChild(document.createElement('div'));
-        element.className = 'form-disclaimer';
-
-        if (disclaimer instanceof Node) {
-            element.appendChild(disclaimer);
+        if (body instanceof Node) {
+            form.insertAdjacentElement('beforeend', body);
         } else {
-            element.innerHTML += disclaimer;
+            form.insertAdjacentHTML('beforeend', body);
         }
 
-        const list = form.appendChild(document.createElement('ul'));
-        list.className = `${namespace}-list`;
-
-        for (const element of elements) {
-            const listItem = list.appendChild(document.createElement('li'));
-
-            if (element instanceof Node) {
-                listItem.appendChild(element);
-            } else {
-                listItem.innerHTML += element;
-            }
-        }
-
-        form.innerHTML += `
+        form.insertAdjacentHTML('beforeend', `
             <div class="form-group form-group--submit">
                 <div class="form-submit">
                     <button type="reset" class="btn-secondary">Cancel</button>
@@ -305,7 +319,7 @@ function prompt(title, disclaimer, elements) {
                         </span>
                     </button>
                 </div>
-            </div>`;
+            </div>`);
 
         const content = document.createElement('div');
         content.className = 'content-form';
@@ -335,16 +349,16 @@ function createModal(title, body, options) {
 
     const modalTitle = fragment.querySelector('.modal-title');
     if (title instanceof Node) {
-        modalTitle.appendChild(title);
+        modalTitle.insertAdjacentElement('beforeend', title);
     } else {
-        modalTitle.innerHTML += title;
+        modalTitle.insertAdjacentHTML('beforeend', title);
     }
 
     const modalBody = fragment.querySelector('.modal-body');
     if (body instanceof Node) {
-        modalBody.appendChild(body);
+        modalBody.insertAdjacentElement('beforeend', body);
     } else {
-        modalBody.innerHTML += body;
+        modalBody.insertAdjacentHTML('beforeend', body);
     }
 
     const element = document.createElement('div');
