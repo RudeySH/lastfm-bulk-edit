@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.2.2
+// @version     0.2.3
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -58,8 +58,9 @@ modalTemplate.innerHTML = `
     <div class="popup_wrapper popup_wrapper_visible" style="opacity: 1; visibility: visible; position: fixed; overflow: auto; width: 100%; height: 100%; top: 0px; left: 0px; text-align: center;">
         <div class="modal-dialog popup_content" role="dialog" aria-labelledby="modal-label" data-popup-initialized="true" aria-hidden="false" style="opacity: 1; visibility: visible; pointer-events: auto; display: inline-block; outline: none; text-align: left; position: relative; vertical-align: middle;" tabindex="-1">
             <div class="modal-content">
-                <h2 class="modal-title"></h2>
-                <div class="modal-body"></div>
+                <div class="modal-body">
+                    <h2 class="modal-title"></h2>
+                </div>
             </div>
         </div>
         <div class="popup_align" style="display: inline-block; vertical-align: middle; height: 100%;"></div>
@@ -336,14 +337,14 @@ function createModal(title, body, options) {
     if (title instanceof Node) {
         modalTitle.appendChild(title);
     } else {
-        modalTitle.innerHTML = title;
+        modalTitle.innerHTML += title;
     }
 
     const modalBody = fragment.querySelector('.modal-body');
     if (body instanceof Node) {
         modalBody.appendChild(body);
     } else {
-        modalBody.innerHTML = body;
+        modalBody.innerHTML += body;
     }
 
     const element = document.createElement('div');
