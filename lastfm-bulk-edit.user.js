@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.3.2
+// @version     0.3.3
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -28,8 +28,8 @@ if (!authLink) {
 const libraryURL = `${authLink.href}/library`;
 
 // https://regex101.com/r/KwEMRx/1
-const albumRegExp = new RegExp(`^${libraryURL}/music(\\+[^/]*)*(/[^+][^/]*){2}$`);
-const artistRegExp = new RegExp(`^${libraryURL}/music(\\+[^/]*)*(/[^+][^/]*){1}$`);
+const albumRegExp = new RegExp(`^${libraryURL}/music(/\\+[^/]*)*(/[^+][^/]*){2}$`);
+const artistRegExp = new RegExp(`^${libraryURL}/music(/\\+[^/]*)*(/[^+][^/]*){1}$`);
 
 const domParser = new DOMParser();
 
@@ -515,6 +515,7 @@ async function fetchScrobbleData(url, loadingModal, parentStep) {
         url = url.substr(0, indexOfQuery);
     }
 
+    console.log('fetching', url, getUrlType(url));
     if (getUrlType(url) === 'artist') {
         url += '/+tracks'; // skip artist overview and go straight to the tracks
     }
