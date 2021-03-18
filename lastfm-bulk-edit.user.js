@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.3.1
+// @version     0.3.2
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -116,6 +116,10 @@ function appendStyle() {
             display: flex;
             justify-content: center;
             align-items: center;
+        }
+
+        .${namespace}-text-danger {
+            color: #d92323;
         }
 
         .${namespace}-text-info {
@@ -233,7 +237,15 @@ function getEditScrobbleForm(url, row) {
 
         // when editing multiple albums album, show an album selection dialog first
         if (scrobbleDataGroups.length >= 2) {
-            let defaultSelection = 'all';
+            const noAlbumKey = JSON.stringify({ album_name: '', album_artist_name: '' });
+            let currentAlbumKey = undefined;
+
+            // put the "No Album" album first
+            scrobbleDataGroups = scrobbleDataGroups.sort(([key1], [key2]) => {
+                if (key1 === noAlbumKey) return -1;
+                if (key2 === noAlbumKey) return +1;
+                return 0;
+            });
 
             // when the edit dialog was initiated from an album or album track, put that album first in the list
             if (urlType === 'album' || getUrlType(document.URL) === 'album') {
@@ -244,16 +256,16 @@ function getEditScrobbleForm(url, row) {
                 const album_artist_name = (urlType === 'album' && row
                     ? row.querySelector('.chartlist-artist') || document.querySelector('.library-header-title, .library-header-crumb')
                     : document.querySelector('.text-colour-link')).textContent.trim();
-                const currentAlbumKey = JSON.stringify({ album_name, album_artist_name });
+                currentAlbumKey = JSON.stringify({ album_name, album_artist_name });
 
                 // put the current album first
                 scrobbleDataGroups = scrobbleDataGroups.sort(([key1], [key2]) => {
                     if (key1 === currentAlbumKey) return -1;
                     if (key2 === currentAlbumKey) return +1;
+                    if (key1 === noAlbumKey) return -1;
+                    if (key2 === noAlbumKey) return +1;
                     return 0;
                 });
-
-                defaultSelection = 'first';
             }
 
             const body = document.createElement('div');
@@ -273,17 +285,16 @@ function getEditScrobbleForm(url, row) {
                 </div>
                 <ul class="${namespace}-list">
                     ${scrobbleDataGroups.map(([key, scrobbleData], index) => {
-                const firstScrobbleData = scrobbleData[0];
-                const album_name = firstScrobbleData.get('album_name');
-                const artist_name = firstScrobbleData.get('album_artist_name') || firstScrobbleData.get('artist_name');
-                const selectFirst = index === 0 && defaultSelection === 'first';
+                        const firstScrobbleData = scrobbleData[0];
+                        const album_name = firstScrobbleData.get('album_name');
+                        const artist_name = firstScrobbleData.get('album_artist_name') || firstScrobbleData.get('artist_name');
 
-                return `
+                        return `
                             <li>
                                 <div class="checkbox">
                                     <label>
-                                        <input type="checkbox" name="key" value="${he.escape(key)}" ${selectFirst || defaultSelection === 'all' ? 'checked' : ''} />
-                                        <strong title="${he.escape(album_name || '')}" class="${namespace}-ellipsis ${selectFirst ? `${namespace}-text-info` : ''}">
+                                        <input type="checkbox" name="key" value="${he.escape(key)}" ${currentAlbumKey === undefined || currentAlbumKey === key ? 'checked' : ''} />
+                                        <strong title="${he.escape(album_name || '')}" class="${namespace}-ellipsis ${currentAlbumKey === key ? `${namespace}-text-info` : !album_name ? `${namespace}-text-danger` : ''}">
                                             ${album_name ? he.escape(album_name) : '<em>No Album</em>'}
                                         </strong>
                                         <div title="${he.escape(artist_name)}" class="${namespace}-ellipsis">
@@ -295,7 +306,7 @@ function getEditScrobbleForm(url, row) {
                                     </label>
                                 </div>
                             </li>`;
-            }).join('')}
+                    }).join('')}
                 </ul>`;
 
             const checkboxes = body.querySelectorAll('input[type="checkbox"]');
