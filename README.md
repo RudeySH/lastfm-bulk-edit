@@ -2,6 +2,8 @@
 
 Bulk edit your scrobbles for any artist, album or track on [Last.fm](https://www.last.fm/) at once.
 
+[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=QPVH74PGFEFTL&source=url)
+
 
 ## Instructions
 1. Upgrade to [Last.fm Pro](https://www.last.fm/pro).
@@ -52,7 +54,7 @@ There could be many reasons for this. Sometimes Last.fm servers are too busy, tr
 
 ### How do I get in contact with you?
 
-If you believe you have found a bug, feel free to open a GitHub issue. For general support or discussion, hit me up on Discord, you'll find me in the [Last.fm Discord](https://discord.gg/6aTeg3u) (Rudey#5517).
+If you have found a bug, or want to propose a feature or improvement, feel free to open a [GitHub issue](https://github.com/RudeySH/lastfm-bulk-edit/issues). For general support or discussion, use [GitHub discussions](https://github.com/RudeySH/lastfm-bulk-edit/discussions) or contact me on Discord, you'll find me in the [Last.fm Discord](https://discord.gg/6aTeg3u) (I'm Rudey#5517).
 
 
 ### Why do I need a Last.fm Pro subscription?
