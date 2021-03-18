@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.3.0
+// @version     0.3.1
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -67,8 +67,7 @@ initialize();
 
 function initialize() {
     appendStyle();
-    appendEditScrobbleHeaderLink(document);
-    appendEditScrobbleMenuItems(document);
+    appendEditScrobbleHeaderLinkAndMenuItems(document);
 
     // use MutationObserver because Last.fm is a single-page application
 
@@ -76,8 +75,7 @@ function initialize() {
         for (const mutation of mutations) {
             for (const node of mutation.addedNodes) {
                 if (node instanceof Element) {
-                    appendEditScrobbleHeaderLink(node);
-                    appendEditScrobbleMenuItems(node);
+                    appendEditScrobbleHeaderLinkAndMenuItems(node);
                 }
             }
         }
@@ -127,6 +125,15 @@ function appendStyle() {
     document.head.appendChild(style);
 }
 
+function appendEditScrobbleHeaderLinkAndMenuItems(element) {
+    if (!document.URL.startsWith(libraryURL)) {
+        return; // current page is not the user's library
+    }
+
+    appendEditScrobbleHeaderLink(element);
+    appendEditScrobbleMenuItems(element);
+}
+
 function appendEditScrobbleHeaderLink(element) {
     const header = element.querySelector('.library-header');
 
@@ -141,7 +148,7 @@ function appendEditScrobbleHeaderLink(element) {
 
     form.style.display = 'inline';
     button.style.display = 'none';
-    
+
     const link = form.appendChild(document.createElement('a'));
     link.href = 'javascript:void(0)';
     link.role = 'button';
@@ -153,10 +160,6 @@ function appendEditScrobbleHeaderLink(element) {
 }
 
 function appendEditScrobbleMenuItems(element) {
-    if (!document.URL.startsWith(libraryURL)) {
-        return; // current page is not the user's library
-    }
-
     const tables = element.querySelectorAll('table.chartlist');
 
     for (const table of tables) {
@@ -190,7 +193,7 @@ function getEditScrobbleForm(url, row) {
     let submit = false;
 
     button.addEventListener('click', async event => {
-        if (!submit) {    
+        if (!submit) {
             event.stopImmediatePropagation();
             return;
         }
