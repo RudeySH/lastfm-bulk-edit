@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.3.3
+// @version     0.3.4
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -515,7 +515,6 @@ async function fetchScrobbleData(url, loadingModal, parentStep) {
         url = url.substr(0, indexOfQuery);
     }
 
-    console.log('fetching', url, getUrlType(url));
     if (getUrlType(url) === 'artist') {
         url += '/+tracks'; // skip artist overview and go straight to the tracks
     }
@@ -889,21 +888,21 @@ function augmentInput(urlType, scrobbleData, popup, input, plural) {
         input.parentNode.insertBefore(abbr, input.nextElementChild);
 
         input.dataset.confirm = `You are about to merge scrobbles for ${groups.length} ${plural}. This cannot be undone. Would you like to continue?`;
+
+        // datalist: a native HTML5 autocomplete feature
+        const datalist = document.createElement('datalist');
+        datalist.id = `${namespace}-${popup.id}-${input.name}-datalist`;
+
+        for (const [key] of groups) {
+            const option = document.createElement('option');
+            option.value = key || '';
+            datalist.appendChild(option);
+        }
+
+        input.autocomplete = 'off';
+        input.setAttribute('list', datalist.id);
+        input.parentNode.insertBefore(datalist, input.nextElementChild);
     }
-
-    // datalist: a native HTML5 autocomplete feature
-    const datalist = document.createElement('datalist');
-    datalist.id = `${namespace}-${popup.id}-${input.name}-datalist`;
-
-    for (const [key] of groups) {
-        const option = document.createElement('option');
-        option.value = key || '';
-        datalist.appendChild(option);
-    }
-
-    input.autocomplete = 'off';
-    input.setAttribute('list', datalist.id);
-    input.parentNode.insertBefore(datalist, input.nextElementChild);
 
     // display green color when field was edited, red if it's not allowed to be empty
     const formGroup = input.closest('.form-group');
