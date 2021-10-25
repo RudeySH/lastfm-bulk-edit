@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.3.4
+// @version     0.3.5
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -685,16 +685,6 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
     augmentInput(urlType, scrobbleData, popup, album_name_input, 'albums');
     augmentInput(urlType, scrobbleData, popup, album_artist_name_input, 'album artists');
 
-    // keep album artist name in sync
-    let previousValue = artist_name_input.value;
-    artist_name_input.addEventListener('input', () => {
-        if (album_artist_name_input.value === previousValue) {
-            album_artist_name_input.value = artist_name_input.value;
-            album_artist_name_input.dispatchEvent(new Event('input'));
-        }
-        previousValue = artist_name_input.value;
-    });
-
     if (album_artist_name_input.placeholder === 'Mixed') {
         const template = document.createElement('template');
         template.innerHTML = `
@@ -704,6 +694,16 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
                 </div>
             </div>`;
         artist_name_input.parentNode.insertBefore(template.content, artist_name_input.nextElementChild);
+    } else {
+        // keep album artist name in sync
+        let previousValue = artist_name_input.value;
+        artist_name_input.addEventListener('input', () => {
+            if (album_artist_name_input.value === previousValue) {
+                album_artist_name_input.value = artist_name_input.value;
+                album_artist_name_input.dispatchEvent(new Event('input'));
+            }
+            previousValue = artist_name_input.value;
+        });
     }
 
     // replace the "Edit all" checkbox with one that cannot be disabled
