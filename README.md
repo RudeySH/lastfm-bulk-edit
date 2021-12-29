@@ -6,11 +6,13 @@ Bulk edit your scrobbles for any artist, album or track on [Last.fm](https://www
 
 
 ## Instructions
+
 1. Upgrade to [Last.fm Pro](https://www.last.fm/pro).
 2. Install a userscript manager:
-   - [Violentmonkey](https://violentmonkey.github.io/) (recommended).
-   - [Tampermonkey](https://tampermonkey.net/) (alternative to Violentmonkey, supports more browsers).
+   - [Violentmonkey](https://violentmonkey.github.io/) (recommended, open source).
+   - [Tampermonkey](https://tampermonkey.net/) (alternative to Violentmonkey, closed source).
    - Greasemonkey is currently not supported, see FAQ.
+   - See next paragraph for Android devices (iOS not supported).
 3. Install this userscript: [Last.fm Bulk Edit](https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/master/lastfm-bulk-edit.user.js).
    - If you're using Violentmonkey, press the "Confirm installation" button on the top-right.
    - If you're using Tampermonkey, press the "Install" or "Reinstall" button on the top-left.
@@ -18,6 +20,20 @@ Bulk edit your scrobbles for any artist, album or track on [Last.fm](https://www
 5. Use the new "Edit scrobbles" menu item like in the examples below.
 
 To update the installed userscript to the latest version, simply do step 3 again.
+
+
+## Installing a userscript manager on Android devices
+
+Because Google Chrome and Samsung Internet do not support add-ons, the following instructions are for Firefox only.
+
+1. Create a collection on the [Firefox Browser Add-ons website](https://addons.mozilla.org/en-US/firefox/collections/). You have to enter the collection name in the Firefox app later, so use a simple name such as "android". The description is required, and the custom URL can't contain upper-case letters.
+2. Edit the collection and use the search bar to find and add add-ons. Search for "Violentmonkey" (recommended) or "Tampermonkey".
+3. Take note of your Firefox user ID number, which is shown on the top-right. You have to enter it in the Firefox app later.
+4. Install the following app: [Firefox Browser (Nightly for Developers)](https://play.google.com/store/apps/details?id=org.mozilla.fenix). You can't use the regular Firefox app.
+5. In the app, go to **⋮** → **⚙ Settings** → **About Firefox Nightly**, and tap the Firefox logo five times to enable debug options.
+6. Go to **⋮** → **⚙ Settings** → **Custom Add-on collection**, and enter your User ID and collection name (both can be found on the website from step 1).
+7. Restart Firefox Nightly, and go to **⋮** → **Add-ons**, Violentmonkey or Tampermonkey should show up. Tap the plus (+) icon to install it.
+8. Continue with step 3 of the instructions in the previous paragraph.
 
 
 ## Examples
