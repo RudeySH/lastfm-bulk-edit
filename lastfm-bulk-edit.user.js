@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.3.6
+// @version     0.4.0
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -25,24 +25,22 @@ if (!authLink) {
     return; // not logged in
 }
 
-const libraryURL = `${authLink.href}/library`;
-
 // https://regex101.com/r/UCmC8f/1
-const albumRegExp = new RegExp(`^${libraryURL}/music(/\\+[^/]*)*(/[^+][^/]*){2}$`);
-const artistRegExp = new RegExp(`^${libraryURL}/music(/\\+[^/]*)*(/[^+][^/]*){1}(/\\+[^/]*)?$`);
+const albumRegExp = new RegExp(`^${authLink.href}/library/music(/\\+[^/]*)*(/[^+][^/]*){2}$`);
+const artistRegExp = new RegExp(`^${authLink.href}/library/music(/\\+[^/]*)*(/[^+][^/]*){1}(/\\+[^/]*)?$`);
 
 const domParser = new DOMParser();
 
 const editScrobbleFormTemplate = document.createElement('template');
 editScrobbleFormTemplate.innerHTML = `
-    <form method="POST" action="${libraryURL}/edit?edited-variation=library-track-scrobble" data-edit-scrobble="">
+    <form method="POST" action="${authLink.href}/library/edit?edited-variation=library-track-scrobble" data-edit-scrobble="">
         <input type="hidden" name="csrfmiddlewaretoken" value="">
         <input type="hidden" name="artist_name" value="">
         <input type="hidden" name="track_name" value="">
         <input type="hidden" name="album_name" value="">
         <input type="hidden" name="album_artist_name" value="">
         <input type="hidden" name="timestamp" value="">
-        <button type="submit" class="mimic-link dropdown-menu-clickable-item more-item--edit">
+        <button type="submit" class="mimic-link dropdown-menu-clickable-item more-item--edit-old">
             Edit scrobbles
         </button>
     </form>`;
@@ -130,8 +128,8 @@ function appendStyle() {
 }
 
 function appendEditScrobbleHeaderLinkAndMenuItems(element) {
-    if (!document.URL.startsWith(libraryURL)) {
-        return; // current page is not the user's library
+    if (!document.URL.startsWith(authLink.href)) {
+        return; // current page is not the user's profile
     }
 
     appendEditScrobbleHeaderLink(element);
@@ -171,7 +169,7 @@ function appendEditScrobbleMenuItems(element) {
 
     for (const table of tables) {
         for (const row of table.tBodies[0].rows) {
-            const link = row.querySelector('a.chartlist-count-bar-link');
+            const link = row.querySelector('a.chartlist-count-bar-link,a.more-item--track[href^="/user/"]');
 
             if (!link) {
                 continue; // this is not an artist, album or track
