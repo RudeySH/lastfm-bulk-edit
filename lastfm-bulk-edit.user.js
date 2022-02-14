@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.4.0
+// @version     0.5.0
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -91,6 +91,30 @@ function appendStyle() {
     style.innerHTML = `
         .${namespace}-abbr {
             cursor: pointer;
+        }
+
+        @media (pointer: coarse), (hover: none) {
+            .${namespace}-abbr[title]:focus {
+                position: relative;
+                display: inline-flex;
+                justify-content: center;
+            }
+
+            .${namespace}-abbr[title]:focus::after {
+                content: attr(title);
+                position: absolute;
+                top: 100%;
+                left: 0%;
+                color: #000;
+                background-color: #fff;
+                border: 1px solid;
+                width: fit-content;
+                padding: 3px;
+                font-size: small;
+                line-height: 1;
+                white-space: pre;
+                z-index: 1;
+            }
         }
 
         .${namespace}-ellipsis {
@@ -747,7 +771,7 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
                         <input id="id_edit_all" type="checkbox" checked disabled>
                         <input name="edit_all" type="hidden" value="true">
                         Edit all
-                        <span class="abbr" title="You have scrobbled any combination of ${summary} ${scrobbleData.length} times">
+                        <span class="abbr ${namespace}-abbr" tabindex="-1" title="You have scrobbled any combination of ${summary} ${scrobbleData.length} times">
                             ${scrobbleData.length} scrobbles
                         </span>
                         of this ${urlType}
@@ -910,6 +934,7 @@ function augmentInput(scrobbleData, popup, input, plural) {
 
         const abbr = document.createElement('span');
         abbr.className = `abbr ${namespace}-abbr`;
+        abbr.tabIndex = -1;
         abbr.textContent = `${groups.length} ${plural}`;
         abbr.title = groups.map(([key, values]) => `${values.length}x${tab}${key || ''}`).join('\n');
         input.parentNode.insertBefore(abbr, input.nextElementChild);
