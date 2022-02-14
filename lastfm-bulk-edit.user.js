@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.5.0
+// @version     0.5.1
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -105,13 +105,13 @@ function appendStyle() {
                 position: absolute;
                 top: 100%;
                 left: 0%;
-                color: #000;
-                background-color: #fff;
-                border: 1px solid;
+                color: #fff;
+                background-color: #2b2a32;
+                border: 1px solid #fff;
                 width: fit-content;
-                padding: 3px;
+                padding: 5px;
                 font-size: small;
-                line-height: 1;
+                line-height: normal;
                 white-space: pre;
                 z-index: 1;
             }
