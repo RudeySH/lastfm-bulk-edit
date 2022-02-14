@@ -114,7 +114,6 @@ function appendStyle() {
                 line-height: normal;
                 white-space: pre;
                 z-index: 1;
-                user-select: all;
             }
         }
 
