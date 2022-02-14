@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.5.1
+// @version     0.5.2
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -65,7 +65,7 @@ initialize();
 
 function initialize() {
     appendStyle();
-    appendEditScrobbleHeaderLinkAndMenuItems(document);
+    appendEditScrobbleHeaderLinkAndMenuItems(document.body);
 
     // use MutationObserver because Last.fm is a single-page application
 
@@ -90,7 +90,7 @@ function appendStyle() {
 
     style.innerHTML = `
         .${namespace}-abbr {
-            cursor: pointer;
+            cursor: help;
         }
 
         @media (pointer: coarse), (hover: none) {
@@ -109,11 +109,12 @@ function appendStyle() {
                 background-color: #2b2a32;
                 border: 1px solid #fff;
                 width: fit-content;
-                padding: 5px;
+                padding: 4px 7px;
                 font-size: small;
                 line-height: normal;
                 white-space: pre;
                 z-index: 1;
+                user-select: all;
             }
         }
 
@@ -189,25 +190,23 @@ function appendEditScrobbleHeaderLink(element) {
 }
 
 function appendEditScrobbleMenuItems(element) {
-    const tables = element.querySelectorAll('table.chartlist');
+    const rows = element.matches('tr') ? [element] : element.querySelectorAll('tr');
 
-    for (const table of tables) {
-        for (const row of table.tBodies[0].rows) {
-            const link = row.querySelector('a.chartlist-count-bar-link,a.more-item--track[href^="/user/"]');
+    for (const row of rows) {
+        const link = row.querySelector('a.chartlist-count-bar-link,a.more-item--track[href^="/user/"]');
 
-            if (!link) {
-                continue; // this is not an artist, album or track
-            }
-
-            const form = getEditScrobbleForm(link.href, row);
-
-            const editScrobbleMenuItem = document.createElement('li');
-            editScrobbleMenuItem.appendChild(form);
-
-            // append new menu item to the DOM
-            const menu = row.querySelector('.chartlist-more-menu');
-            menu.insertBefore(editScrobbleMenuItem, menu.firstElementChild);
+        if (!link) {
+            continue; // this is not an artist, album or track
         }
+
+        const form = getEditScrobbleForm(link.href, row);
+
+        const editScrobbleMenuItem = document.createElement('li');
+        editScrobbleMenuItem.appendChild(form);
+
+        // append new menu item to the DOM
+        const menu = row.querySelector('.chartlist-more-menu');
+        menu.insertBefore(editScrobbleMenuItem, menu.firstElementChild);
     }
 }
 
@@ -309,7 +308,7 @@ function getEditScrobbleForm(url, row) {
                     </div>
                 </div>
                 <ul class="${namespace}-list">
-                    ${scrobbleDataGroups.map(([key, scrobbleData], index) => {
+                    ${scrobbleDataGroups.map(([key, scrobbleData]) => {
                         const firstScrobbleData = scrobbleData[0];
                         const album_name = firstScrobbleData.get('album_name');
                         const artist_name = firstScrobbleData.get('album_artist_name') || firstScrobbleData.get('artist_name');
