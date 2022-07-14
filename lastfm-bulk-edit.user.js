@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Last.fm Bulk Edit
 // @namespace   https://github.com/RudeySH/lastfm-bulk-edit
-// @version     0.5.2
+// @version     0.5.3
 // @author      Rudey
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
 // @license     GPL-3.0-or-later
@@ -220,6 +220,10 @@ function getEditScrobbleForm(url, row) {
     let submit = false;
 
     button.addEventListener('click', async event => {
+        if (!document.querySelector('.header--user .label')) {
+            alert('Last.fm pro subscription is required to edit scrobbles.')
+        }
+
         if (!submit) {
             event.stopImmediatePropagation();
             return;
