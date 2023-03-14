@@ -1,5 +1,5 @@
 const path = require('path');
-const WebpackUserscript = require('webpack-userscript');
+const { UserscriptPlugin } = require('webpack-userscript');
 
 var config = {
   entry: './src/index.ts',
@@ -23,22 +23,21 @@ var config = {
     minimize: false,
   },
   output: {
-    filename: 'lastfm-bulk-edit.user.js',
+    filename: 'lastfm-bulk-edit.js',
     path: path.resolve(__dirname, 'dist'),
   },
   plugins: [
-    new WebpackUserscript({
+    new UserscriptPlugin({
       headers: {
         name: 'Last.fm Bulk Edit',
         match: 'https://www.last.fm/*',
-        license: 'AGPL-3.0-or-later',
-        icon: 'https://github.com/RudeySH/lastfm-bulk-edit/raw/main/img/icon.png',
+        icon: 'https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/main/img/icon.png',
         namespace: 'https://github.com/RudeySH/lastfm-bulk-edit',
         require: [
           'https://cdnjs.cloudflare.com/ajax/libs/he/1.2.0/he.min.js',
         ],
       },
-      downloadBaseUrl: 'https://github.com/RudeySH/lastfm-bulk-edit/raw/main/dist/',
+      downloadBaseUrl: 'https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/main/dist/',
     }),
   ],
 };

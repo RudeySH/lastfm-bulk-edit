@@ -9,13 +9,13 @@ Bulk edit your scrobbles for any artist, album or track on [Last.fm](https://www
 
 1. Upgrade to [Last.fm Pro](https://www.last.fm/pro).
 2. Install a userscript manager:
-   - [Violentmonkey](https://violentmonkey.github.io/) (recommended, open source).
-   - [Tampermonkey](https://tampermonkey.net/) (alternative to Violentmonkey, closed source).
+   - [Violentmonkey](https://violentmonkey.github.io/) (open source, recommended).
+   - [Tampermonkey](https://tampermonkey.net/) (closed source, supports more browsers).
    - Greasemonkey is currently not supported, see FAQ.
    - See next paragraph for Android devices (iOS not supported).
-3. Install this userscript: [Last.fm Bulk Edit](https://github.com/RudeySH/lastfm-bulk-edit/raw/main/dist/lastfm-bulk-edit.user.js).
-   - If you're using Violentmonkey, press the "Confirm installation" button on the top-right.
-   - If you're using Tampermonkey, press the "Install" or "Reinstall" button on the top-left.
+3. Install this userscript: [Last.fm Bulk Edit](https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/main/dist/lastfm-bulk-edit.user.js).
+   - If you're using Violentmonkey, press the "Confirm installation" button on the left.
+   - If you're using Tampermonkey, press the "Install" button on the top-left.
 4. Go to your [Last.fm library](https://www.last.fm/user/_/library/artists).
 5. Use the new "Edit scrobbles" menu item like in the examples below.
 
