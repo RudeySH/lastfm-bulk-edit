@@ -1,4 +1,5 @@
 import he from 'he';
+import { enhanceAutomaticEditsPage } from './features/enhance-automatic-edits-page';
 
 const namespace = 'lastfm-bulk-edit';
 
@@ -48,6 +49,7 @@ if (authLink) {
 function initialize() {
     appendStyle();
     appendEditScrobbleHeaderLinkAndMenuItems(document.body);
+    enhanceAutomaticEditsPage(document.body);
 
     // use MutationObserver because Last.fm is a single-page application
 
@@ -56,6 +58,7 @@ function initialize() {
             for (const node of mutation.addedNodes) {
                 if (node instanceof Element) {
                     appendEditScrobbleHeaderLinkAndMenuItems(node);
+                    enhanceAutomaticEditsPage(node);
                 }
             }
         }
@@ -193,7 +196,7 @@ function appendEditScrobbleMenuItems(element: Element) {
 function getEditScrobbleForm(url: string, row?: HTMLTableRowElement) {
     const urlType = getUrlType(url);
 
-    const form = (editScrobbleFormTemplate.content.cloneNode(true) as ParentNode).querySelector('form')!;
+    const form = editScrobbleFormTemplate.content.firstElementChild!.cloneNode(true) as HTMLFormElement;
     const button = form.querySelector('button')!;
 
     let allScrobbleData: FormData[];
@@ -293,11 +296,11 @@ function getEditScrobbleForm(url: string, row?: HTMLTableRowElement) {
                 </div>
                 <ul class="${namespace}-list">
                     ${scrobbleDataGroups.map(([key, scrobbleData]) => {
-                        const firstScrobbleData = scrobbleData[0];
-                        const album_name = firstScrobbleData.get('album_name') as string;
-                        const artist_name = (firstScrobbleData.get('album_artist_name') ?? firstScrobbleData.get('artist_name')!) as string;
+                const firstScrobbleData = scrobbleData[0];
+                const album_name = firstScrobbleData.get('album_name') as string;
+                const artist_name = (firstScrobbleData.get('album_artist_name') ?? firstScrobbleData.get('artist_name')!) as string;
 
-                        return `
+                return `
                             <li>
                                 <div class="checkbox">
                                     <label>
@@ -314,7 +317,7 @@ function getEditScrobbleForm(url: string, row?: HTMLTableRowElement) {
                                     </label>
                                 </div>
                             </li>`;
-                    }).join('')}
+            }).join('')}
                 </ul>`;
 
             const checkboxes = body.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
@@ -741,7 +744,7 @@ async function augmentEditScrobbleForm(urlType: string, scrobbleData: FormData[]
                 </div>
             </div>`;
 
-        const message = (messageTemplate.content.cloneNode(true) as ParentNode).firstElementChild!;
+        const message = messageTemplate.content.firstElementChild!.cloneNode(true);
         album_artist_name_input.parentNode!.insertBefore(message, album_artist_name_input.nextElementSibling);
 
         const removeMessage = () => {
@@ -772,7 +775,7 @@ async function augmentEditScrobbleForm(urlType: string, scrobbleData: FormData[]
     }
 
     // replace the "Bulk edit" checkbox with one that cannot be disabled
-    let bulkEditFormGroup = form.querySelector('.form-group--edit_all');
+    let bulkEditFormGroup: Node | null = form.querySelector('.form-group--edit_all');
     if (bulkEditFormGroup) form.removeChild(bulkEditFormGroup);
 
     const types = ['artist', 'track', 'album', 'album artist'];
@@ -798,7 +801,7 @@ async function augmentEditScrobbleForm(urlType: string, scrobbleData: FormData[]
             </div>
         </div>`;
 
-    bulkEditFormGroup = bulkEditFormGroupTemplate.content.cloneNode(true) as Element;
+    bulkEditFormGroup = bulkEditFormGroupTemplate.content.firstElementChild!.cloneNode(true);
     form.insertBefore(bulkEditFormGroup, automaticEditFormGroup ?? form.lastElementChild);
 
     // each exact track, artist, album and album artist combination is considered a distinct scrobble

@@ -5,6 +5,12 @@ Bulk edit your scrobbles for any artist, album or track on [Last.fm](https://www
 [![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=QPVH74PGFEFTL&source=url)
 
 
+## Features
+
+- Bulk edit your scrobbles for any artist, album or track at once.
+- View and manage all your automatic edits in a single page.
+
+
 ## Instructions
 
 1. Upgrade to [Last.fm Pro](https://www.last.fm/pro).
@@ -59,6 +65,21 @@ In this example, auto-corrections are still turned on, but the steps are roughly
 This GIF also demonstrates that the album artist name is kept in sync when changing the artist name.
 
 ![](img/album-artist-sync.gif)
+
+
+## Automatic edits
+
+Last.fm Bulk Edit works perfectly in combination with automatic edits. Automatic edits is a Last.fm Pro feature that allows you to save track edits, and have them be applied automatically to new scrobbles.
+
+On top of this, Last.fm Bulk Edit improves the [automatic edits page](https://www.last.fm/settings/subscription/automatic-edits) by adding the following features:
+
+- Load all track edits into a single page (optional).
+- Click on a column header to sort rows alphabetically by track/artist/album name.
+- Show original track name, original artist name, original album name, and original album artist name.
+- Emphasize the fields that have been edited with **bold text**.
+- Widen the table if the track / artist / album / album artist name is very long, instead of trunctating the text with "…".
+
+![](img/automatic-edits.png)
 
 
 ## Frequently asked questions
