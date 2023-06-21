@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.1.0
+// @version 1.1.1
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -121,7 +121,7 @@ function enhanceAutomaticEditsPage(element) {
             const text = await response.text();
             const doc = domParser.parseFromString(text, 'text/html');
             const chartTable2 = doc.querySelector('.chart-table');
-            for (const row of chartTable2.tBodies[0].rows) {
+            for (const row of [...chartTable2.tBodies[0].rows]) {
                 enhanceTrackEditRow(row);
                 chartTableBody.appendChild(row);
             }

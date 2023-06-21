@@ -93,7 +93,7 @@ export function enhanceAutomaticEditsPage(element: Element) {
 
             const chartTable2 = doc.querySelector<HTMLTableElement>('.chart-table')!;
 
-            for (const row of chartTable2.tBodies[0].rows) {
+            for (const row of [...chartTable2.tBodies[0].rows]) {
                 enhanceTrackEditRow(row);
                 chartTableBody.appendChild(row);
             }
