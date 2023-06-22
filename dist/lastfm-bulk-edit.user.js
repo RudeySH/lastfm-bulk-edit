@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.1.1
+// @version 1.1.2
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -12,9 +12,65 @@
 // ==/UserScript==
 
 /******/ (() => { // webpackBootstrap
-/******/ 	"use strict";
-/******/ 	// The require scope
-/******/ 	var __webpack_require__ = {};
+/******/ 	var __webpack_modules__ = ({
+
+/***/ 433:
+/***/ ((module) => {
+
+async function* asyncPool(concurrency, iterable, iteratorFn) {
+  const executing = new Set();
+  async function consume() {
+    const [promise, value] = await Promise.race(executing);
+    executing.delete(promise);
+    return value;
+  }
+  for (const item of iterable) {
+    // Wrap iteratorFn() in an async fn to ensure we get a promise.
+    // Then expose such promise, so it's possible to later reference and
+    // remove it from the executing pool.
+    const promise = (async () => await iteratorFn(item, iterable))().then(
+      value => [promise, value]
+    );
+    executing.add(promise);
+    if (executing.size >= concurrency) {
+      yield await consume();
+    }
+  }
+  while (executing.size) {
+    yield await consume();
+  }
+}
+
+module.exports = asyncPool;
+
+
+/***/ })
+
+/******/ 	});
+/************************************************************************/
+/******/ 	// The module cache
+/******/ 	var __webpack_module_cache__ = {};
+/******/ 	
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/ 		// Check if module is in cache
+/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		if (cachedModule !== undefined) {
+/******/ 			return cachedModule.exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 			// no module.id needed
+/******/ 			// no module.loaded needed
+/******/ 			exports: {}
+/******/ 		};
+/******/ 	
+/******/ 		// Execute the module function
+/******/ 		__webpack_modules__[moduleId](module, module.exports, __webpack_require__);
+/******/ 	
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
 /******/ 	
 /************************************************************************/
 /******/ 	/* webpack/runtime/compat get default export */
@@ -48,120 +104,213 @@
 /******/ 	
 /************************************************************************/
 var __webpack_exports__ = {};
+// This entry need to be wrapped in an IIFE because it need to be in strict mode.
+(() => {
+"use strict";
 
 ;// CONCATENATED MODULE: external "he"
 const external_he_namespaceObject = he;
 var external_he_default = /*#__PURE__*/__webpack_require__.n(external_he_namespaceObject);
+// EXTERNAL MODULE: ./node_modules/tiny-async-pool/lib/es9.js
+var es9 = __webpack_require__(433);
+var es9_default = /*#__PURE__*/__webpack_require__.n(es9);
 ;// CONCATENATED MODULE: ./src/features/enhance-automatic-edits-page.ts
-const buttonContainerTemplate = document.createElement('template');
-buttonContainerTemplate.innerHTML = `
-    <span>
-        ·
-        <a href="javascript:void(0)" role="button">Load All</a>
-    </span>`;
-const loadingSpinnerTemplate = document.createElement('template');
-loadingSpinnerTemplate.innerHTML = `
-    <img src="/static/images/loading_dark_light_64.gif" height="22" style="margin-left: 5px;" alt="Loading..." />`;
-function enhanceAutomaticEditsPage(element) {
+
+const viewAllButtonTemplate = document.createElement('template');
+viewAllButtonTemplate.innerHTML = `
+    <button type="button" class="btn-primary" disabled>
+        View All At Once
+    </button>`;
+const domParser = new DOMParser();
+let loadPagesPromise = undefined;
+let loadPagesProgressElement = undefined;
+async function enhanceAutomaticEditsPage(element) {
     if (!document.URL.startsWith('https://www.last.fm/settings/subscription/automatic-edits')) {
         return;
     }
     const section = element.querySelector('#subscription-corrections');
-    const chartTable = section === null || section === void 0 ? void 0 : section.querySelector('.chart-table');
-    const chartTableBody = chartTable === null || chartTable === void 0 ? void 0 : chartTable.tBodies[0];
-    const paginationList = section === null || section === void 0 ? void 0 : section.querySelector('.pagination-list');
-    if (!section || !chartTable || !chartTableBody || !paginationList) {
+    const table = section === null || section === void 0 ? void 0 : section.querySelector('table');
+    if (!section || !table) {
         return;
     }
-    chartTable.style.minWidth = '100%';
-    chartTable.style.width = 'initial';
-    const headerRow = chartTable.tHead.rows[0];
+    const viewAllButton = viewAllButtonTemplate.content.firstElementChild.cloneNode(true);
+    section.insertBefore(viewAllButton, section.firstElementChild);
+    enhanceTable(table);
+    const paginationList = section === null || section === void 0 ? void 0 : section.querySelector('.pagination-list');
+    if (!paginationList) {
+        return;
+    }
+    const paginationListItems = [...paginationList.querySelectorAll('.pagination-page')];
+    const currentPageNumber = parseInt(paginationListItems.find(x => x.ariaCurrent === 'page').textContent, 10);
+    const pageCount = parseInt(paginationListItems[paginationListItems.length - 1].textContent, 10);
+    if (pageCount === 1) {
+        return;
+    }
+    loadPagesProgressElement = document.createElement('div');
+    loadPagesProgressElement.style.lineHeight = '32px';
+    loadPagesProgressElement.style.textAlign = 'center';
+    section.appendChild(loadPagesProgressElement);
+    loadPagesPromise !== null && loadPagesPromise !== void 0 ? loadPagesPromise : (loadPagesPromise = loadPages(table, currentPageNumber, pageCount));
+    const pages = await loadPagesPromise;
+    section.removeChild(loadPagesProgressElement);
+    const alphabeticalPaginationList = document.createElement('ul');
+    alphabeticalPaginationList.className = 'pagination-list';
+    section.appendChild(alphabeticalPaginationList);
+    let previousLetter = undefined;
+    for (const page of pages) {
+        for (const row of page.rows) {
+            const formData = getFormData(row);
+            let letter = formData.get('artist_name_original').toString()[0].toUpperCase();
+            if (letter < 'A' || letter > 'Z') {
+                letter = '#';
+            }
+            if (letter !== previousLetter) {
+                const anchor = document.createElement('a');
+                anchor.href = '?page=' + page.pageNumber;
+                anchor.textContent = letter;
+                const listItem = document.createElement('li');
+                listItem.className = 'pagination-page';
+                listItem.ariaCurrent = page.pageNumber === currentPageNumber ? 'page' : null;
+                listItem.appendChild(anchor);
+                alphabeticalPaginationList.appendChild(listItem);
+                alphabeticalPaginationList.appendChild(document.createTextNode(' '));
+                previousLetter = letter;
+            }
+        }
+    }
+    viewAllButton.disabled = false;
+    viewAllButton.addEventListener('click', async () => {
+        viewAllButton.disabled = true;
+        const tableBody = table.tBodies[0];
+        const firstRow = tableBody.rows[0];
+        for (const page of pages) {
+            if (page.pageNumber === currentPageNumber) {
+                continue;
+            }
+            for (const row of page.rows) {
+                enhanceRow(row);
+                if (page.pageNumber < currentPageNumber) {
+                    firstRow.insertAdjacentElement('beforebegin', row);
+                }
+                else {
+                    tableBody.appendChild(row);
+                }
+            }
+        }
+        section.removeChild(viewAllButton);
+    });
+}
+function enhanceTable(table) {
+    table.style.minWidth = '100%';
+    table.style.width = 'initial';
+    const headerRow = table.tHead.rows[0];
+    const body = table.tBodies[0];
     let sortedCellIndex = 1;
-    for (let i = 0; i < headerRow.cells.length; i++) {
+    const keys = [
+        'track_name_original',
+        'artist_name_original',
+        'album_name_original',
+        'album_artist_name_original',
+    ];
+    for (let i = 0; i < 4; i++) {
+        const key = keys[i];
         const cell = headerRow.cells[i];
-        cell.innerHTML = `<a href="#" role="button">${cell.textContent}</a>`;
+        cell.innerHTML = `<a href="javascript:void(0)" role="button">${cell.textContent}</a>`;
         cell.addEventListener('click', () => {
             const dir = sortedCellIndex === i ? -1 : 1;
             sortedCellIndex = sortedCellIndex === i ? -1 : i;
-            const rows = [...chartTableBody.rows];
-            rows.sort((a, b) => a.cells[i].textContent.trim().localeCompare(b.cells[i].textContent.trim()) * dir);
+            const rows = [...body.rows].map(row => {
+                let value = row.dataset[key];
+                if (!value) {
+                    value = row.querySelector(`input[name="${key}"]`).value;
+                    row.dataset[key] = value;
+                }
+                return { row, value };
+            });
+            rows.sort((a, b) => a.value.localeCompare(b.value) * dir);
             for (const row of rows) {
-                chartTableBody.appendChild(row);
+                body.appendChild(row.row);
             }
         });
     }
-    for (const row of chartTableBody.rows) {
-        enhanceTrackEditRow(row);
+    for (const row of body.rows) {
+        enhanceRow(row);
     }
-    const urlParams = new URLSearchParams(window.location.search);
-    const page = urlParams.get('page');
-    if (page !== null && parseInt(page, 10) >= 2) {
+}
+function enhanceRow(row) {
+    if (row.dataset['enhanced'] === 'true') {
         return;
     }
-    const h4 = section.querySelector('h4, .buffer-standard');
-    const buttonContainer = buttonContainerTemplate.content.firstElementChild.cloneNode(true);
-    h4.appendChild(buttonContainer);
-    const loadAllButton = buttonContainer.querySelector('a');
-    loadAllButton.addEventListener('click', async () => {
-        loadAllButton.style.pointerEvents = 'none';
-        const loadingSpinner = loadingSpinnerTemplate.content.firstElementChild.cloneNode(true);
-        loadAllButton.insertAdjacentElement('afterend', loadingSpinner);
-        const pages = paginationList.querySelectorAll('.pagination-page');
-        const lastPage = parseInt(pages[pages.length - 1].textContent, 10);
-        paginationList.parentNode.removeChild(paginationList);
-        const domParser = new DOMParser();
-        for (let i = 2; i <= lastPage; i++) {
-            const response = await fetch(`/settings/subscription/automatic-edits?page=${i}&_pjax=%23content`, {
-                credentials: 'include',
-                headers: {
-                    'X-Pjax': 'true',
-                    'X-Pjax-Container': '#content',
-                },
-            });
-            const text = await response.text();
-            const doc = domParser.parseFromString(text, 'text/html');
-            const chartTable2 = doc.querySelector('.chart-table');
-            for (const row of [...chartTable2.tBodies[0].rows]) {
-                enhanceTrackEditRow(row);
-                chartTableBody.appendChild(row);
-            }
-        }
-        buttonContainer.parentNode.removeChild(buttonContainer);
-    });
-}
-function enhanceTrackEditRow(row) {
-    const form = row.querySelector('form');
-    const formData = new FormData(form);
+    row.dataset['enhanced'] = 'true';
+    const formData = getFormData(row);
     const trackName = formData.get('track_name').toString();
     const artistName = formData.get('artist_name').toString();
     const albumName = formData.get('album_name').toString();
     const albumArtistName = formData.get('album_artist_name').toString();
-    function rebuild(cell, content) {
+    function emphasize(cell, content) {
         cell.style.lineHeight = '1';
         cell.innerHTML = `
             <div>
-                <b>${content}</b>
+                <span class="sr-only">
+                    ${cell.textContent}
+                </span>
+                <b>
+                    ${content}
+                </b>
             </div>
             <small>
                 Originally "${cell.textContent}"
             </small>`;
     }
     if (trackName !== formData.get('track_name_original')) {
-        rebuild(row.cells[0], trackName);
+        emphasize(row.cells[0], trackName);
     }
     else {
         // remove bold
         row.cells[0].innerHTML = row.cells[0].textContent;
     }
     if (artistName !== formData.get('artist_name_original')) {
-        rebuild(row.cells[1], artistName);
+        emphasize(row.cells[1], artistName);
     }
     if (albumName !== formData.get('album_name_original')) {
-        rebuild(row.cells[2], albumName);
+        emphasize(row.cells[2], albumName);
     }
     if (albumArtistName !== formData.get('album_artist_name_original')) {
-        rebuild(row.cells[3], albumArtistName);
+        emphasize(row.cells[3], albumArtistName);
     }
+}
+function getFormData(row) {
+    return new FormData(row.querySelector('form'));
+}
+async function loadPages(table, currentPageNumber, pageCount) {
+    const pages = [{ pageNumber: currentPageNumber, rows: [...table.tBodies[0].rows] }];
+    const pageNumbersToLoad = [...Array(pageCount).keys()].map(i => i + 1).filter(i => i !== currentPageNumber);
+    updateProgress(1, pageCount);
+    for await (const page of es9_default()(6, pageNumbersToLoad, loadPage)) {
+        pages.push(page);
+        updateProgress(pages.length, pageCount);
+    }
+    pages.sort((a, b) => a.pageNumber < b.pageNumber ? -1 : 1);
+    return pages;
+}
+async function loadPage(pageNumber) {
+    const response = await fetch(`/settings/subscription/automatic-edits?page=${pageNumber}&_pjax=%23content`, {
+        credentials: 'include',
+        headers: {
+            'X-Pjax': 'true',
+            'X-Pjax-Container': '#content',
+        },
+    });
+    const text = await response.text();
+    const doc = domParser.parseFromString(text, 'text/html');
+    const table = doc.querySelector('.chart-table');
+    return {
+        pageNumber,
+        rows: [...table.tBodies[0].rows],
+    };
+}
+function updateProgress(current, total) {
+    loadPagesProgressElement.textContent = `${current} / ${total} (${(current * 100 / total).toFixed(0)}%)`;
 }
 
 ;// CONCATENATED MODULE: ./src/index.ts
@@ -173,7 +322,7 @@ const authLink = document.querySelector('a.auth-link');
 // https://regex101.com/r/UCmC8f/1
 const albumRegExp = new RegExp(`^${authLink === null || authLink === void 0 ? void 0 : authLink.href}/library/music(/\\+[^/]*)*(/[^+][^/]*){2}$`);
 const artistRegExp = new RegExp(`^${authLink === null || authLink === void 0 ? void 0 : authLink.href}/library/music(/\\+[^/]*)*(/[^+][^/]*){1}(/\\+[^/]*)?$`);
-const domParser = new DOMParser();
+const src_domParser = new DOMParser();
 const editScrobbleFormTemplate = document.createElement('template');
 editScrobbleFormTemplate.innerHTML = `
     <form method="POST" action="${authLink === null || authLink === void 0 ? void 0 : authLink.href}/library/edit?edited-variation=library-track-scrobble" data-edit-scrobble="">
@@ -696,7 +845,7 @@ async function fetchHTMLDocument(url) {
         const response = await fetch(url);
         if (response.ok) {
             const html = await response.text();
-            const doc = domParser.parseFromString(html, 'text/html');
+            const doc = src_domParser.parseFromString(html, 'text/html');
             if (doc.querySelector('table.chartlist') || i === 4) {
                 return doc;
             }
@@ -920,7 +1069,7 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
             const response = await fetch(form.action, { method: 'POST', body: body });
             const html = await response.text();
             // use DOMParser to check the response for alerts
-            const placeholder = domParser.parseFromString(html, 'text/html');
+            const placeholder = src_domParser.parseFromString(html, 'text/html');
             for (const message of placeholder.querySelectorAll('.alert-danger')) {
                 alert(message.textContent.trim()); // TODO: pretty validation messages
             }
@@ -1025,6 +1174,8 @@ function cloneFormData(formData) {
     }
     return clonedFormData;
 }
+
+})();
 
 /******/ })()
 ;

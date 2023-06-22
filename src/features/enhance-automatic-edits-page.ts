@@ -1,123 +1,196 @@
-const buttonContainerTemplate = document.createElement('template');
-buttonContainerTemplate.innerHTML = `
-    <span>
-        ·
-        <a href="javascript:void(0)" role="button">Load All</a>
-    </span>`;
+import asyncPool from 'tiny-async-pool';
 
-const loadingSpinnerTemplate = document.createElement('template');
-loadingSpinnerTemplate.innerHTML = `
-    <img src="/static/images/loading_dark_light_64.gif" height="22" style="margin-left: 5px;" alt="Loading..." />`
+const viewAllButtonTemplate = document.createElement('template');
+viewAllButtonTemplate.innerHTML = `
+    <button type="button" class="btn-primary" disabled>
+        View All At Once
+    </button>`;
 
-export function enhanceAutomaticEditsPage(element: Element) {
+const domParser = new DOMParser();
+let loadPagesPromise: Promise<Page[]> | undefined = undefined;
+let loadPagesProgressElement: HTMLElement | undefined = undefined;
+
+interface Page {
+    pageNumber: number;
+    rows: HTMLTableRowElement[];
+}
+
+export async function enhanceAutomaticEditsPage(element: Element) {
     if (!document.URL.startsWith('https://www.last.fm/settings/subscription/automatic-edits')) {
         return;
     }
 
     const section = element.querySelector('#subscription-corrections');
-    const chartTable = section?.querySelector<HTMLTableElement>('.chart-table')!;
-    const chartTableBody = chartTable?.tBodies[0];
-    const paginationList = section?.querySelector('.pagination-list');
+    const table = section?.querySelector('table');
 
-    if (!section || !chartTable || !chartTableBody || !paginationList) {
+    if (!section || !table) {
         return;
     }
 
-    chartTable.style.minWidth = '100%';
-    chartTable.style.width = 'initial';
+    const viewAllButton = viewAllButtonTemplate.content.firstElementChild!.cloneNode(true) as HTMLButtonElement;
+    section.insertBefore(viewAllButton, section.firstElementChild);
 
-    const headerRow = chartTable.tHead!.rows[0];
+    enhanceTable(table);
+
+    const paginationList = section?.querySelector('.pagination-list');
+
+    if (!paginationList) {
+        return;
+    }
+
+    const paginationListItems = [...paginationList.querySelectorAll('.pagination-page')];
+    const currentPageNumber = parseInt(paginationListItems.find(x => x.ariaCurrent === 'page')!.textContent!, 10);
+    const pageCount = parseInt(paginationListItems[paginationListItems.length - 1].textContent!, 10);
+
+    if (pageCount === 1) {
+        return;
+    }
+
+    loadPagesProgressElement = document.createElement('div');
+    loadPagesProgressElement.style.lineHeight = '32px';
+    loadPagesProgressElement.style.textAlign = 'center';
+    section.appendChild(loadPagesProgressElement);
+
+    loadPagesPromise ??= loadPages(table, currentPageNumber, pageCount);
+    const pages = await loadPagesPromise;
+
+    section.removeChild(loadPagesProgressElement);
+
+    const alphabeticalPaginationList = document.createElement('ul');
+    alphabeticalPaginationList.className = 'pagination-list';
+    section.appendChild(alphabeticalPaginationList);
+
+    let previousLetter: string | undefined = undefined;
+
+    for (const page of pages) {
+        for (const row of page.rows) {
+            const formData = getFormData(row);
+
+            let letter = formData.get('artist_name_original')!.toString()[0].toUpperCase();
+
+            if (letter < 'A' || letter > 'Z') {
+                letter = '#';
+            }
+
+            if (letter !== previousLetter) {
+                const anchor = document.createElement('a');
+                anchor.href = '?page=' + page.pageNumber;
+                anchor.textContent = letter;
+
+                const listItem = document.createElement('li');
+                listItem.className = 'pagination-page';
+                listItem.ariaCurrent = page.pageNumber === currentPageNumber ? 'page' : null;
+                listItem.appendChild(anchor);
+
+                alphabeticalPaginationList.appendChild(listItem);
+                alphabeticalPaginationList.appendChild(document.createTextNode(' '));
+                previousLetter = letter;
+            }
+        }
+    }
+
+    viewAllButton.disabled = false;
+
+    viewAllButton.addEventListener('click', async () => {
+        viewAllButton.disabled = true;
+
+        const tableBody = table.tBodies[0];
+        const firstRow: HTMLTableRowElement = tableBody.rows[0];
+
+        for (const page of pages) {
+            if (page.pageNumber === currentPageNumber) {
+                continue;
+            }
+
+            for (const row of page.rows) {
+                enhanceRow(row);
+
+                if (page.pageNumber < currentPageNumber) {
+                    firstRow.insertAdjacentElement('beforebegin', row);
+                } else {
+                    tableBody.appendChild(row);
+                }
+            }
+        }
+
+        section.removeChild(viewAllButton);
+    });
+}
+
+function enhanceTable(table: HTMLTableElement) {
+    table.style.minWidth = '100%';
+    table.style.width = 'initial';
+
+    const headerRow = table.tHead!.rows[0];
+    const body = table.tBodies[0];
+
     let sortedCellIndex = 1;
 
-    for (let i = 0; i < headerRow.cells.length; i++) {
+    const keys = [
+        'track_name_original',
+        'artist_name_original',
+        'album_name_original',
+        'album_artist_name_original',
+    ]
+
+    for (let i = 0; i < 4; i++) {
+        const key = keys[i];
         const cell = headerRow.cells[i];
 
-        cell.innerHTML = `<a href="#" role="button">${cell.textContent}</a>`;
+        cell.innerHTML = `<a href="javascript:void(0)" role="button">${cell.textContent}</a>`;
 
         cell.addEventListener('click', () => {
             const dir = sortedCellIndex === i ? -1 : 1;
             sortedCellIndex = sortedCellIndex === i ? -1 : i;
 
-            const rows = [...chartTableBody.rows];
-            rows.sort((a, b) => a.cells[i].textContent!.trim().localeCompare(b.cells[i].textContent!.trim()) * dir);
+            const rows = [...body.rows].map(row => {
+                let value = row.dataset[key];
+
+                if (!value) {
+                    value = row.querySelector<HTMLInputElement>(`input[name="${key}"]`)!.value;
+                    row.dataset[key] = value;
+                }
+
+                return { row, value };
+            });
+
+            rows.sort((a, b) => a.value.localeCompare(b.value) * dir);
 
             for (const row of rows) {
-                chartTableBody.appendChild(row);
+                body.appendChild(row.row);
             }
         });
     }
 
-    for (const row of chartTableBody.rows) {
-        enhanceTrackEditRow(row);
+    for (const row of body.rows) {
+        enhanceRow(row);
     }
+}
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const page = urlParams.get('page');
-
-    if (page !== null && parseInt(page, 10) >= 2) {
+function enhanceRow(row: HTMLTableRowElement) {
+    if (row.dataset['enhanced'] === 'true') {
         return;
     }
 
-    const h4 = section.querySelector('h4, .buffer-standard')!;
+    row.dataset['enhanced'] = 'true';
 
-    const buttonContainer = buttonContainerTemplate.content.firstElementChild!.cloneNode(true) as HTMLAnchorElement;
-    h4.appendChild(buttonContainer);
-
-    const loadAllButton = buttonContainer.querySelector('a')!;
-
-    loadAllButton.addEventListener('click', async () => {
-        loadAllButton.style.pointerEvents = 'none';
-
-        const loadingSpinner = loadingSpinnerTemplate.content.firstElementChild!.cloneNode(true) as HTMLImageElement;
-        loadAllButton.insertAdjacentElement('afterend', loadingSpinner);
-
-        const pages = paginationList.querySelectorAll('.pagination-page');
-        const lastPage = parseInt(pages[pages.length - 1].textContent!, 10);
-
-        paginationList.parentNode!.removeChild(paginationList);
-
-        const domParser = new DOMParser();
-
-        for (let i = 2; i <= lastPage; i++) {
-            const response = await fetch(`/settings/subscription/automatic-edits?page=${i}&_pjax=%23content`, {
-                credentials: 'include',
-                headers: {
-                    'X-Pjax': 'true',
-                    'X-Pjax-Container': '#content',
-                },
-            });
-
-            const text = await response.text();
-
-            const doc = domParser.parseFromString(text, 'text/html');
-
-            const chartTable2 = doc.querySelector<HTMLTableElement>('.chart-table')!;
-
-            for (const row of [...chartTable2.tBodies[0].rows]) {
-                enhanceTrackEditRow(row);
-                chartTableBody.appendChild(row);
-            }
-        }
-
-        buttonContainer.parentNode!.removeChild(buttonContainer);
-    });
-}
-
-function enhanceTrackEditRow(row: HTMLTableRowElement) {
-    const form = row.querySelector('form')!;
-
-    const formData = new FormData(form);
+    const formData = getFormData(row);
 
     const trackName = formData.get('track_name')!.toString();
     const artistName = formData.get('artist_name')!.toString();
     const albumName = formData.get('album_name')!.toString();
     const albumArtistName = formData.get('album_artist_name')!.toString();
 
-    function rebuild(cell: HTMLTableCellElement, content: string) {
+    function emphasize(cell: HTMLTableCellElement, content: string) {
         cell.style.lineHeight = '1';
         cell.innerHTML = `
             <div>
-                <b>${content}</b>
+                <span class="sr-only">
+                    ${cell.textContent}
+                </span>
+                <b>
+                    ${content}
+                </b>
             </div>
             <small>
                 Originally "${cell.textContent}"
@@ -125,21 +198,67 @@ function enhanceTrackEditRow(row: HTMLTableRowElement) {
     }
 
     if (trackName !== formData.get('track_name_original')) {
-        rebuild(row.cells[0], trackName);
+        emphasize(row.cells[0], trackName);
     } else {
         // remove bold
         row.cells[0].innerHTML = row.cells[0].textContent!;
     }
 
     if (artistName !== formData.get('artist_name_original')) {
-        rebuild(row.cells[1], artistName);
+        emphasize(row.cells[1], artistName);
     }
 
     if (albumName !== formData.get('album_name_original')) {
-        rebuild(row.cells[2], albumName);
+        emphasize(row.cells[2], albumName);
     }
 
     if (albumArtistName !== formData.get('album_artist_name_original')) {
-        rebuild(row.cells[3], albumArtistName);
+        emphasize(row.cells[3], albumArtistName);
     }
+}
+
+function getFormData(row: HTMLTableRowElement) {
+    return new FormData(row.querySelector('form')!);
+}
+
+async function loadPages(table: HTMLTableElement, currentPageNumber: number, pageCount: number) {
+    const pages: Page[] = [{ pageNumber: currentPageNumber, rows: [...table.tBodies[0].rows] }];
+    const pageNumbersToLoad = [...Array(pageCount).keys()].map(i => i + 1).filter(i => i !== currentPageNumber);
+
+    updateProgress(1, pageCount);
+
+    for await (const page of asyncPool(6, pageNumbersToLoad, loadPage)) {
+        pages.push(page);
+
+        updateProgress(pages.length, pageCount);
+    }
+
+    pages.sort((a, b) => a.pageNumber < b.pageNumber ? -1 : 1);
+
+    return pages;
+}
+
+async function loadPage(pageNumber: number) {
+    const response = await fetch(`/settings/subscription/automatic-edits?page=${pageNumber}&_pjax=%23content`, {
+        credentials: 'include',
+        headers: {
+            'X-Pjax': 'true',
+            'X-Pjax-Container': '#content',
+        },
+    })
+
+    const text = await response.text();
+
+    const doc = domParser.parseFromString(text, 'text/html');
+
+    const table = doc.querySelector<HTMLTableElement>('.chart-table')!;
+
+    return {
+        pageNumber,
+        rows: [...table.tBodies[0].rows],
+    };
+}
+
+function updateProgress(current: number, total: number) {
+    loadPagesProgressElement!.textContent = `${current} / ${total} (${(current * 100 / total).toFixed(0)}%)`;
 }
