@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.1.3
+// @version 1.1.4
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -141,7 +141,7 @@ async function enhanceAutomaticEditsPage(element) {
         return;
     }
     const paginationListItems = [...paginationList.querySelectorAll('.pagination-page')];
-    const currentPageNumber = parseInt(paginationListItems.find(x => x.ariaCurrent === 'page').textContent, 10);
+    const currentPageNumber = parseInt(paginationListItems.find(x => x.getAttribute('aria-current') === 'page').textContent, 10);
     const pageCount = parseInt(paginationListItems[paginationListItems.length - 1].textContent, 10);
     if (pageCount === 1) {
         return;
@@ -149,7 +149,7 @@ async function enhanceAutomaticEditsPage(element) {
     loadPagesProgressElement = document.createElement('div');
     loadPagesProgressElement.style.lineHeight = '32px';
     loadPagesProgressElement.style.textAlign = 'center';
-    section.appendChild(loadPagesProgressElement);
+    table.insertAdjacentElement('beforebegin', loadPagesProgressElement);
     loadPagesPromise !== null && loadPagesPromise !== void 0 ? loadPagesPromise : (loadPagesPromise = loadPages(table, currentPageNumber, pageCount));
     const pages = await loadPagesPromise;
     section.removeChild(loadPagesProgressElement);
@@ -170,7 +170,9 @@ async function enhanceAutomaticEditsPage(element) {
                 anchor.textContent = letter;
                 const listItem = document.createElement('li');
                 listItem.className = 'pagination-page';
-                listItem.ariaCurrent = page.pageNumber === currentPageNumber ? 'page' : null;
+                if (page.pageNumber === currentPageNumber) {
+                    listItem.setAttribute('aria-current', 'page');
+                }
                 listItem.appendChild(anchor);
                 alphabeticalPaginationList.appendChild(listItem);
                 alphabeticalPaginationList.appendChild(document.createTextNode(' '));
@@ -180,7 +182,7 @@ async function enhanceAutomaticEditsPage(element) {
     }
     viewAllButton.disabled = false;
     viewAllButton.addEventListener('click', async () => {
-        if (pages.length >= 100 && !window.confirm(`You are about to view ${pages.length} at once. This might take a long time to load. Are you sure?`)) {
+        if (pages.length >= 100 && !window.confirm(`You are about to view ${pages.length} pages at once. This might take a long time to load. Are you sure?`)) {
             return;
         }
         viewAllButton.disabled = true;
