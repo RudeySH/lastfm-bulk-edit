@@ -39,7 +39,7 @@ export async function enhanceAutomaticEditsPage(element: Element) {
     }
 
     const paginationListItems = [...paginationList.querySelectorAll('.pagination-page')];
-    const currentPageNumber = parseInt(paginationListItems.find(x => x.ariaCurrent === 'page')!.textContent!, 10);
+    const currentPageNumber = parseInt(paginationListItems.find(x => x.getAttribute('aria-current') === 'page')!.textContent!, 10);
     const pageCount = parseInt(paginationListItems[paginationListItems.length - 1].textContent!, 10);
 
     if (pageCount === 1) {
@@ -49,7 +49,7 @@ export async function enhanceAutomaticEditsPage(element: Element) {
     loadPagesProgressElement = document.createElement('div');
     loadPagesProgressElement.style.lineHeight = '32px';
     loadPagesProgressElement.style.textAlign = 'center';
-    section.appendChild(loadPagesProgressElement);
+    table.insertAdjacentElement('beforebegin', loadPagesProgressElement);
 
     loadPagesPromise ??= loadPages(table, currentPageNumber, pageCount);
     const pages = await loadPagesPromise;
@@ -58,7 +58,7 @@ export async function enhanceAutomaticEditsPage(element: Element) {
 
     const alphabeticalPaginationList = document.createElement('ul');
     alphabeticalPaginationList.className = 'pagination-list';
-    section.appendChild(alphabeticalPaginationList);
+    table.insertAdjacentElement('beforebegin', alphabeticalPaginationList);
 
     let previousLetter: string | undefined = undefined;
 
@@ -79,7 +79,9 @@ export async function enhanceAutomaticEditsPage(element: Element) {
 
                 const listItem = document.createElement('li');
                 listItem.className = 'pagination-page';
-                listItem.ariaCurrent = page.pageNumber === currentPageNumber ? 'page' : null;
+                if (page.pageNumber === currentPageNumber) {
+                    listItem.setAttribute('aria-current', 'page');
+                }
                 listItem.appendChild(anchor);
 
                 alphabeticalPaginationList.appendChild(listItem);
@@ -92,6 +94,10 @@ export async function enhanceAutomaticEditsPage(element: Element) {
     viewAllButton.disabled = false;
 
     viewAllButton.addEventListener('click', async () => {
+        if (pages.length >= 100 && !window.confirm(`You are about to view ${pages.length} pages at once. This might take a long time to load. Are you sure?`)) {
+            return;
+        }
+
         viewAllButton.disabled = true;
 
         const tableBody = table.tBodies[0];
@@ -110,6 +116,10 @@ export async function enhanceAutomaticEditsPage(element: Element) {
                 } else {
                     tableBody.appendChild(row);
                 }
+            }
+
+            if (page.pageNumber % 10 === 0) {
+                await delay(1);
             }
         }
 
@@ -261,4 +271,8 @@ async function loadPage(pageNumber: number) {
 
 function updateProgress(current: number, total: number) {
     loadPagesProgressElement!.textContent = `${current} / ${total} (${(current * 100 / total).toFixed(0)}%)`;
+}
+
+function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }

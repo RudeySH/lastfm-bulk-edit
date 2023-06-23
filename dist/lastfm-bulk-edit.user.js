@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.1.2
+// @version 1.1.3
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -155,7 +155,7 @@ async function enhanceAutomaticEditsPage(element) {
     section.removeChild(loadPagesProgressElement);
     const alphabeticalPaginationList = document.createElement('ul');
     alphabeticalPaginationList.className = 'pagination-list';
-    section.appendChild(alphabeticalPaginationList);
+    table.insertAdjacentElement('beforebegin', alphabeticalPaginationList);
     let previousLetter = undefined;
     for (const page of pages) {
         for (const row of page.rows) {
@@ -180,6 +180,9 @@ async function enhanceAutomaticEditsPage(element) {
     }
     viewAllButton.disabled = false;
     viewAllButton.addEventListener('click', async () => {
+        if (pages.length >= 100 && !window.confirm(`You are about to view ${pages.length} at once. This might take a long time to load. Are you sure?`)) {
+            return;
+        }
         viewAllButton.disabled = true;
         const tableBody = table.tBodies[0];
         const firstRow = tableBody.rows[0];
@@ -195,6 +198,9 @@ async function enhanceAutomaticEditsPage(element) {
                 else {
                     tableBody.appendChild(row);
                 }
+            }
+            if (page.pageNumber % 10 === 0) {
+                await delay(1);
             }
         }
         section.removeChild(viewAllButton);
@@ -311,6 +317,9 @@ async function loadPage(pageNumber) {
 }
 function updateProgress(current, total) {
     loadPagesProgressElement.textContent = `${current} / ${total} (${(current * 100 / total).toFixed(0)}%)`;
+}
+function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 ;// CONCATENATED MODULE: ./src/index.ts
