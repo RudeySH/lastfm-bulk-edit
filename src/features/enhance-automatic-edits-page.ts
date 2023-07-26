@@ -100,6 +100,8 @@ export async function enhanceAutomaticEditsPage(element: Element) {
 
         viewAllButton.disabled = true;
 
+        table.style.tableLayout = 'fixed';
+
         const tableBody = table.tBodies[0];
         const firstRow: HTMLTableRowElement = tableBody.rows[0];
 
@@ -128,8 +130,7 @@ export async function enhanceAutomaticEditsPage(element: Element) {
 }
 
 function enhanceTable(table: HTMLTableElement) {
-    table.style.minWidth = '100%';
-    table.style.width = 'initial';
+    table.style.tableLayout = 'auto';
 
     const headerRow = table.tHead!.rows[0];
     const body = table.tBodies[0];
