@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.1.5
+// @version 1.2.0
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -186,6 +186,7 @@ async function enhanceAutomaticEditsPage(element) {
             return;
         }
         viewAllButton.disabled = true;
+        table.style.tableLayout = 'fixed';
         const tableBody = table.tBodies[0];
         const firstRow = tableBody.rows[0];
         for (const page of pages) {
@@ -209,8 +210,7 @@ async function enhanceAutomaticEditsPage(element) {
     });
 }
 function enhanceTable(table) {
-    table.style.minWidth = '100%';
-    table.style.width = 'initial';
+    table.style.tableLayout = 'auto';
     const headerRow = table.tHead.rows[0];
     const body = table.tBodies[0];
     let sortedCellIndex = 1;
@@ -343,7 +343,7 @@ editScrobbleFormTemplate.innerHTML = `
         <input type="hidden" name="album_name" value="">
         <input type="hidden" name="album_artist_name" value="">
         <input type="hidden" name="timestamp" value="">
-        <button type="submit" class="mimic-link dropdown-menu-clickable-item more-item--edit-old">
+        <button type="submit" class="mimic-link dropdown-menu-clickable-item more-item--edit-old" data-analytics-action="EditScrobbleOpen">
             Edit scrobbles
         </button>
     </form>`;
@@ -374,6 +374,10 @@ function initialize() {
         for (const mutation of mutations) {
             for (const node of mutation.addedNodes) {
                 if (node instanceof Element) {
+                    if (node.hasAttribute('data-processed')) {
+                        continue;
+                    }
+                    node.setAttribute('data-processed', 'true');
                     appendEditScrobbleHeaderLinkAndMenuItems(node);
                     enhanceAutomaticEditsPage(node);
                 }
@@ -476,6 +480,7 @@ function appendEditScrobbleHeaderLink(element) {
     header.insertAdjacentElement('beforeend', form);
 }
 function appendEditScrobbleMenuItems(element) {
+    var _a;
     const rows = element instanceof HTMLTableRowElement ? [element] : [...element.querySelectorAll('tr')];
     for (const row of rows) {
         const link = row.querySelector('a.chartlist-count-bar-link,a.more-item--track[href^="/user/"]');
@@ -485,8 +490,12 @@ function appendEditScrobbleMenuItems(element) {
         const form = getEditScrobbleForm(link.href, row);
         const editScrobbleMenuItem = document.createElement('li');
         editScrobbleMenuItem.appendChild(form);
+        editScrobbleMenuItem.setAttribute('data-processed', 'true');
         // append new menu item to the DOM
         const menu = row.querySelector('.chartlist-more-menu');
+        if ((_a = menu.firstElementChild) === null || _a === void 0 ? void 0 : _a.hasAttribute('data-processed')) {
+            menu.removeChild(menu.firstElementChild);
+        }
         menu.insertBefore(editScrobbleMenuItem, menu.firstElementChild);
     }
 }
@@ -674,7 +683,7 @@ function src_prompt(title, body) {
                 hide: reject,
             },
         });
-        form.addEventListener('reset', modal.hide);
+        form.addEventListener('reset', () => modal.hide());
         form.addEventListener('submit', (event) => {
             event.preventDefault();
             resolve(new FormData(form));
@@ -705,12 +714,16 @@ class Modal {
         if (options && options.dismissible) {
             // create X button that closes the modal
             const closeButton = document.createElement('button');
-            closeButton.className = 'modal-dismiss';
+            closeButton.className = 'modal-dismiss sr-only';
             closeButton.textContent = 'Close';
-            closeButton.addEventListener('click', this.hide);
-            // append X button to DOM
+            closeButton.addEventListener('click', () => this.hide());
+            // create modal actions div
+            const modalActions = document.createElement('div');
+            modalActions.className = 'modal-actions';
+            modalActions.appendChild(closeButton);
+            // append modal actions to modal content
             const modalContent = fragment.querySelector('.modal-content');
-            modalContent.insertBefore(closeButton, modalContent.firstElementChild);
+            modalContent.insertBefore(modalActions, modalContent.firstElementChild);
             // close modal when user clicks outside modal
             const popupWrapper = fragment.querySelector('.popup_wrapper');
             popupWrapper.addEventListener('click', (event) => {
@@ -799,7 +812,7 @@ async function fetchScrobbleData(url, loadingModal, parentStep) {
     }
     const scrobbleData = await forEachParallel(loadingModal, parentStep, documentsToFetch, async (documentToFetch, step) => {
         const fetchedDocument = await documentToFetch;
-        const table = fetchedDocument.querySelector('table.chartlist');
+        const table = fetchedDocument.querySelector('table.chartlist:not(.chartlist__placeholder)');
         if (!table) {
             // sometimes a missing chartlist is expected, other times it indicates a failure
             if (fetchedDocument.body.textContent.includes('There was a problem loading your')) {
@@ -857,7 +870,7 @@ async function fetchHTMLDocument(url) {
         if (response.ok) {
             const html = await response.text();
             const doc = src_domParser.parseFromString(html, 'text/html');
-            if (doc.querySelector('table.chartlist') || i === 4) {
+            if (doc.querySelector('table.chartlist:not(.chartlist__placeholder)') || i === 4) {
                 return doc;
             }
         }
