@@ -81,6 +81,13 @@ On top of this, Last.fm Bulk Edit improves the [automatic edits page](https://ww
 - Widen the table if the track / artist / album / album artist name is very long, instead of trunctating the text with "…".
 
 
+## Adds album names and links to scrobble overview
+
+Last.fm Bulk Edit also improves the scrobble overview, by adding album names and links. This makes it easier to keep an eye on whether you are scrobbling with the correct album name.
+
+![](img/scrobble-overview.png)
+
+
 ## Frequently asked questions
 
 ### Why did my edit not save properly?

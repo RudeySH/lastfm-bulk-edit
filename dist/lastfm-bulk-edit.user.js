@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.2.0
+// @version 1.3.0
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -111,6 +111,73 @@ var __webpack_exports__ = {};
 ;// CONCATENATED MODULE: external "he"
 const external_he_namespaceObject = he;
 var external_he_default = /*#__PURE__*/__webpack_require__.n(external_he_namespaceObject);
+;// CONCATENATED MODULE: ./src/features/display-album-name.ts
+async function displayAlbumName(element) {
+    var _a;
+    const rows = element instanceof HTMLTableRowElement ? [element] : [...element.querySelectorAll('tr')];
+    for (const row of rows) {
+        if (row.getAttribute('data-edit-scrobble-id') === null || row.querySelector('.chartlist-album') !== null) {
+            continue;
+        }
+        const coverArtAnchor = row.querySelector('.cover-art');
+        const albumHref = coverArtAnchor.getAttribute('href');
+        const form = row.querySelector('form[data-edit-scrobble]:not([data-edit-scrobbles])');
+        let albumName;
+        if (form !== null) {
+            const formData = new FormData(form);
+            albumName = (_a = formData.get('album_name')) === null || _a === void 0 ? void 0 : _a.toString();
+        }
+        else {
+            albumName = coverArtAnchor.querySelector('img').alt;
+        }
+        // Create and insert th element.
+        const table = row.closest('table');
+        if (!table.classList.contains('lastfm-bulk-edit-chartlist-scrobbles')) {
+            table.classList.add('lastfm-bulk-edit-chartlist-scrobbles');
+            const albumHeaderCell = document.createElement('th');
+            albumHeaderCell.textContent = 'Album';
+            const headerRow = table.tHead.rows[0];
+            headerRow.insertBefore(albumHeaderCell, headerRow.children[4]);
+        }
+        // Create and insert td element.
+        const albumCell = document.createElement('td');
+        albumCell.className = 'chartlist-album';
+        if (albumName) {
+            const albumAnchor = document.createElement('a');
+            albumAnchor.href = albumHref;
+            albumAnchor.textContent = albumName;
+            albumCell.appendChild(albumAnchor);
+        }
+        else {
+            const noAlbumText = document.createElement('em');
+            noAlbumText.className = 'lastfm-bulk-edit-text-danger';
+            noAlbumText.textContent = 'No Album';
+            albumCell.appendChild(noAlbumText);
+        }
+        const nameCell = row.querySelector('.chartlist-name');
+        row.insertBefore(albumCell, nameCell.nextElementSibling);
+        // Add menu items.
+        if (albumName) {
+            const menu = row.querySelector('.chartlist-more-menu');
+            const albumMenuItem1 = document.createElement('li');
+            const menuItemAnchor1 = document.createElement('a');
+            menuItemAnchor1.href = albumHref;
+            menuItemAnchor1.className = 'dropdown-menu-clickable-item more-item--album';
+            menuItemAnchor1.textContent = 'Go to album';
+            albumMenuItem1.appendChild(menuItemAnchor1);
+            const albumMenuItem2 = document.createElement('li');
+            const menuItemAnchor2 = document.createElement('a');
+            menuItemAnchor2.href = document.querySelector('.header-avatar a').href + '/library' + albumHref;
+            menuItemAnchor2.className = 'dropdown-menu-clickable-item more-item--album';
+            menuItemAnchor2.textContent = 'Go to album in library';
+            albumMenuItem2.appendChild(menuItemAnchor2);
+            const artistMenuItem = menu.querySelector('.more-item--artist').parentNode;
+            menu.insertBefore(albumMenuItem1, artistMenuItem);
+            menu.insertBefore(albumMenuItem2, artistMenuItem);
+        }
+    }
+}
+
 // EXTERNAL MODULE: ./node_modules/tiny-async-pool/lib/es9.js
 var es9 = __webpack_require__(433);
 var es9_default = /*#__PURE__*/__webpack_require__.n(es9);
@@ -327,6 +394,7 @@ function delay(ms) {
 ;// CONCATENATED MODULE: ./src/index.ts
 
 
+
 const namespace = 'lastfm-bulk-edit';
 // use the top-right link to determine the current user
 const authLink = document.querySelector('a.auth-link');
@@ -336,7 +404,7 @@ const artistRegExp = new RegExp(`^${authLink === null || authLink === void 0 ? v
 const src_domParser = new DOMParser();
 const editScrobbleFormTemplate = document.createElement('template');
 editScrobbleFormTemplate.innerHTML = `
-    <form method="POST" action="${authLink === null || authLink === void 0 ? void 0 : authLink.href}/library/edit?edited-variation=library-track-scrobble" data-edit-scrobble="">
+    <form method="POST" action="${authLink === null || authLink === void 0 ? void 0 : authLink.href}/library/edit?edited-variation=library-track-scrobble" data-edit-scrobble data-edit-scrobbles>
         <input type="hidden" name="csrfmiddlewaretoken" value="">
         <input type="hidden" name="artist_name" value="">
         <input type="hidden" name="track_name" value="">
@@ -368,6 +436,7 @@ if (authLink) {
 function initialize() {
     appendStyle();
     appendEditScrobbleHeaderLinkAndMenuItems(document.body);
+    displayAlbumName(document.body);
     enhanceAutomaticEditsPage(document.body);
     // use MutationObserver because Last.fm is a single-page application
     const observer = new MutationObserver((mutations) => {
@@ -379,6 +448,7 @@ function initialize() {
                     }
                     node.setAttribute('data-processed', 'true');
                     appendEditScrobbleHeaderLinkAndMenuItems(node);
+                    displayAlbumName(node);
                     enhanceAutomaticEditsPage(node);
                 }
             }
@@ -449,6 +519,27 @@ function appendStyle() {
 
         .${namespace}-text-info {
             color: #2b65d9;
+        }
+
+        @media (min-width: 768px) {
+            .${namespace}-chartlist-scrobbles .chartlist-name {
+                margin-top: -2px;
+                margin-bottom: 13px;
+            }
+
+            .${namespace}-chartlist-scrobbles .chartlist-album {
+                margin-top: 13px;
+                margin-bottom: -2px;
+                position: absolute;
+                left: 133.5px;
+                width: 182.41px;
+            }
+        }
+
+        @media (min-width: 1260px) {
+            .${namespace}-chartlist-scrobbles .chartlist-album {
+                width: 272.41px;
+            }
         }`;
     document.head.appendChild(style);
 }

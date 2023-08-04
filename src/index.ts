@@ -1,4 +1,5 @@
 import he from 'he';
+import { displayAlbumName } from './features/display-album-name';
 import { enhanceAutomaticEditsPage } from './features/enhance-automatic-edits-page';
 
 const namespace = 'lastfm-bulk-edit';
@@ -14,7 +15,7 @@ const domParser = new DOMParser();
 
 const editScrobbleFormTemplate = document.createElement('template');
 editScrobbleFormTemplate.innerHTML = `
-    <form method="POST" action="${authLink?.href}/library/edit?edited-variation=library-track-scrobble" data-edit-scrobble="">
+    <form method="POST" action="${authLink?.href}/library/edit?edited-variation=library-track-scrobble" data-edit-scrobble data-edit-scrobbles>
         <input type="hidden" name="csrfmiddlewaretoken" value="">
         <input type="hidden" name="artist_name" value="">
         <input type="hidden" name="track_name" value="">
@@ -49,6 +50,7 @@ if (authLink) {
 function initialize() {
     appendStyle();
     appendEditScrobbleHeaderLinkAndMenuItems(document.body);
+    displayAlbumName(document.body);
     enhanceAutomaticEditsPage(document.body);
 
     // use MutationObserver because Last.fm is a single-page application
@@ -63,6 +65,7 @@ function initialize() {
 
                     node.setAttribute('data-processed', 'true');
                     appendEditScrobbleHeaderLinkAndMenuItems(node);
+                    displayAlbumName(node);
                     enhanceAutomaticEditsPage(node);
                 }
             }
@@ -136,6 +139,27 @@ function appendStyle() {
 
         .${namespace}-text-info {
             color: #2b65d9;
+        }
+
+        @media (min-width: 768px) {
+            .${namespace}-chartlist-scrobbles .chartlist-name {
+                margin-top: -2px;
+                margin-bottom: 13px;
+            }
+
+            .${namespace}-chartlist-scrobbles .chartlist-album {
+                margin-top: 13px;
+                margin-bottom: -2px;
+                position: absolute;
+                left: 133.5px;
+                width: 182.41px;
+            }
+        }
+
+        @media (min-width: 1260px) {
+            .${namespace}-chartlist-scrobbles .chartlist-album {
+                width: 272.41px;
+            }
         }`;
 
     document.head.appendChild(style);
