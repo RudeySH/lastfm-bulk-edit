@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.3.0
+// @version 1.3.1
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -115,6 +115,7 @@ var external_he_default = /*#__PURE__*/__webpack_require__.n(external_he_namespa
 async function displayAlbumName(element) {
     var _a;
     const rows = element instanceof HTMLTableRowElement ? [element] : [...element.querySelectorAll('tr')];
+    const baseHref = document.querySelector('.secondary-nav-item--overview a').getAttribute('href');
     for (const row of rows) {
         if (row.getAttribute('data-edit-scrobble-id') === null || row.querySelector('.chartlist-album') !== null) {
             continue;
@@ -167,7 +168,7 @@ async function displayAlbumName(element) {
             albumMenuItem1.appendChild(menuItemAnchor1);
             const albumMenuItem2 = document.createElement('li');
             const menuItemAnchor2 = document.createElement('a');
-            menuItemAnchor2.href = document.querySelector('.header-avatar a').href + '/library' + albumHref;
+            menuItemAnchor2.href = baseHref + '/library' + albumHref;
             menuItemAnchor2.className = 'dropdown-menu-clickable-item more-item--album';
             menuItemAnchor2.textContent = 'Go to album in library';
             albumMenuItem2.appendChild(menuItemAnchor2);

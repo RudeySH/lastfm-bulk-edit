@@ -1,6 +1,8 @@
 export async function displayAlbumName(element: Element) {
     const rows = element instanceof HTMLTableRowElement ? [element] : [...element.querySelectorAll('tr')];
 
+    const baseHref = document.querySelector('.secondary-nav-item--overview a')!.getAttribute('href')!;
+
     for (const row of rows) {
         if (row.getAttribute('data-edit-scrobble-id') === null || row.querySelector('.chartlist-album') !== null) {
             continue;
@@ -62,7 +64,7 @@ export async function displayAlbumName(element: Element) {
 
             const albumMenuItem2 = document.createElement('li');
             const menuItemAnchor2 = document.createElement('a');
-            menuItemAnchor2.href = document.querySelector<HTMLAnchorElement>('.header-avatar a')!.href + '/library' + albumHref;
+            menuItemAnchor2.href = baseHref + '/library' + albumHref;
             menuItemAnchor2.className = 'dropdown-menu-clickable-item more-item--album';
             menuItemAnchor2.textContent = 'Go to album in library';
             albumMenuItem2.appendChild(menuItemAnchor2);
