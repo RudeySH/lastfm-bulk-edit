@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.3.2
+// @version 1.3.3
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -535,6 +535,10 @@ function appendStyle() {
                 position: absolute;
                 left: 133.5px;
                 width: 182.41px;
+            }
+
+            .${namespace}-chartlist-scrobbles .chartlist-album::before {
+                width: 0 !important;
             }
         }
 

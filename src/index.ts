@@ -154,6 +154,10 @@ function appendStyle() {
                 left: 133.5px;
                 width: 182.41px;
             }
+
+            .${namespace}-chartlist-scrobbles .chartlist-album::before {
+                width: 0 !important;
+            }
         }
 
         @media (min-width: 1260px) {
