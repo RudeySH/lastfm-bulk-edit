@@ -39,6 +39,7 @@ export async function displayAlbumName(element: Element) {
         if (albumName) {
             const albumAnchor = document.createElement('a');
             albumAnchor.href = albumHref;
+            albumAnchor.title = albumName;
             albumAnchor.textContent = albumName;
             albumCell.appendChild(albumAnchor);
         } else {
