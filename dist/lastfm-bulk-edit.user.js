@@ -147,6 +147,9 @@ async function displayAlbumName(element) {
             const albumAnchor = document.createElement('a');
             albumAnchor.href = albumHref;
             albumAnchor.title = albumName;
+            albumAnchor.style.fontSize = '0.75rem';
+            albumAnchor.style.color = '#999';
+            albumAnchor.style.transform = 'translateY(1px)';
             albumAnchor.textContent = albumName;
             albumCell.appendChild(albumAnchor);
         }
