@@ -148,14 +148,13 @@ function appendStyle() {
             }
 
             .${namespace}-chartlist-scrobbles .chartlist-album {
-                margin-top: 13px;
+                margin-top: 15px;
                 margin-bottom: -2px;
                 position: absolute;
-                left: 133px;
+                left: 134px;
                 width: 182px;
                 font-size:12px;
                 color:#999;
-                transform:translateY(1px);
             }
 
             .${namespace}-chartlist-scrobbles .chartlist-album::before {
