@@ -32,6 +32,7 @@ var config = {
         name: 'Last.fm Bulk Edit',
         match: 'https://www.last.fm/*',
         icon: 'https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/main/img/icon.png',
+        license: 'AGPL-3.0-or-later',
         namespace: 'https://github.com/RudeySH/lastfm-bulk-edit',
         require: [
           'https://cdnjs.cloudflare.com/ajax/libs/he/1.2.0/he.min.js',
