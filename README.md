@@ -8,7 +8,7 @@ Bulk edit your scrobbles for any artist, album or track on [Last.fm](https://www
 ## Features
 
 - Bulk edit your scrobbles for any artist, album or track at once.
-- View and manage all your automatic edits in a single page.
+- Easier management of all your automatic edits.
 
 
 ## Instructions
@@ -73,12 +73,12 @@ Last.fm Bulk Edit works perfectly in combination with automatic edits. Automatic
 
 On top of this, Last.fm Bulk Edit improves the [automatic edits page](https://www.last.fm/settings/subscription/automatic-edits) by adding the following features:
 
-- Navigate track edits by the first letter of the artist name.
+- Navigate track edits by selecting the artist name from a drop-down list.
 - Load all track edits into a single page (optional).
 - Click on a column header to sort rows alphabetically by track/artist/album name.
 - Show original track name, original artist name, original album name, and original album artist name.
 - Emphasize the fields that have been edited with **bold text**.
-- Widen the table if the track / artist / album / album artist name is very long, instead of trunctating the text with "…".
+- Widen the table if the track / artist / album / album artist name is very long, instead of truncating the text with "…".
 
 
 ## Adds album names and links to scrobble overview

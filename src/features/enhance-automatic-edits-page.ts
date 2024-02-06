@@ -46,50 +46,52 @@ export async function enhanceAutomaticEditsPage(element: Element) {
         return;
     }
 
-    loadPagesProgressElement = document.createElement('div');
-    loadPagesProgressElement.style.lineHeight = '32px';
-    loadPagesProgressElement.style.textAlign = 'center';
-    table.insertAdjacentElement('beforebegin', loadPagesProgressElement);
+    loadPagesProgressElement = document.createElement('span');
+    viewAllButton.insertAdjacentElement('afterend', loadPagesProgressElement);
+    viewAllButton.insertAdjacentText('afterend', ' ');
 
     loadPagesPromise ??= loadPages(table, currentPageNumber, pageCount);
     const pages = await loadPagesPromise;
 
     section.removeChild(loadPagesProgressElement);
 
-    const alphabeticalPaginationList = document.createElement('ul');
-    alphabeticalPaginationList.className = 'pagination-list';
-    table.insertAdjacentElement('beforebegin', alphabeticalPaginationList);
-
-    let previousLetter: string | undefined = undefined;
+    const artistMap = new Map<string, { artistName: string, pageNumber: number }>();
 
     for (const page of pages) {
         for (const row of page.rows) {
             const formData = getFormData(row);
+            const artistName = formData.get('artist_name_original')!.toString();
+            const key = artistName.toLowerCase();
 
-            let letter = formData.get('artist_name_original')!.toString()[0].toUpperCase();
-
-            if (letter < 'A' || letter > 'Z') {
-                letter = '#';
-            }
-
-            if (letter !== previousLetter) {
-                const anchor = document.createElement('a');
-                anchor.href = '?page=' + page.pageNumber;
-                anchor.textContent = letter;
-
-                const listItem = document.createElement('li');
-                listItem.className = 'pagination-page';
-                if (page.pageNumber === currentPageNumber) {
-                    listItem.setAttribute('aria-current', 'page');
-                }
-                listItem.appendChild(anchor);
-
-                alphabeticalPaginationList.appendChild(listItem);
-                alphabeticalPaginationList.appendChild(document.createTextNode(' '));
-                previousLetter = letter;
+            if (!artistMap.has(key)) {
+                artistMap.set(key, { artistName, pageNumber: page.pageNumber });
             }
         }
     }
+
+    const artistSelect = document.createElement('select');
+
+    for (const value of artistMap.values()) {
+        const option = document.createElement('option');
+        option.text = value.artistName;
+        option.value = value.pageNumber.toString();
+        artistSelect.appendChild(option);
+    }
+
+    artistSelect.selectedIndex = -1;
+
+    artistSelect.addEventListener('change', () => {
+        const pageNumber = parseInt(artistSelect.value);
+
+            const anchor = document.createElement('a');
+            anchor.href = '/settings/subscription/automatic-edits?page=' + pageNumber;
+            document.body.appendChild(anchor);
+            anchor.click();
+            document.body.removeChild(anchor);
+    });
+
+    viewAllButton.insertAdjacentElement('afterend', artistSelect);
+    viewAllButton.insertAdjacentText('afterend', ' Go to artist: ');
 
     viewAllButton.disabled = false;
 
@@ -124,12 +126,11 @@ export async function enhanceAutomaticEditsPage(element: Element) {
                 await delay(1);
             }
         }
-
-        section.removeChild(viewAllButton);
     });
 }
 
 function enhanceTable(table: HTMLTableElement) {
+    document.body.style.backgroundColor = '#fff';
     table.style.tableLayout = 'auto';
 
     const headerRow = table.tHead!.rows[0];
@@ -204,7 +205,7 @@ function enhanceRow(row: HTMLTableRowElement) {
                 </b>
             </div>
             <small>
-                Originally "${cell.textContent}"
+                Originally "${cell.textContent?.trim()}"
             </small>`
     }
 

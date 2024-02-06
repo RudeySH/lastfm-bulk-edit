@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.3.5
+// @version 1.4.0
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -218,40 +218,41 @@ async function enhanceAutomaticEditsPage(element) {
     if (pageCount === 1) {
         return;
     }
-    loadPagesProgressElement = document.createElement('div');
-    loadPagesProgressElement.style.lineHeight = '32px';
-    loadPagesProgressElement.style.textAlign = 'center';
-    table.insertAdjacentElement('beforebegin', loadPagesProgressElement);
+    loadPagesProgressElement = document.createElement('span');
+    viewAllButton.insertAdjacentElement('afterend', loadPagesProgressElement);
+    viewAllButton.insertAdjacentText('afterend', ' ');
     loadPagesPromise !== null && loadPagesPromise !== void 0 ? loadPagesPromise : (loadPagesPromise = loadPages(table, currentPageNumber, pageCount));
     const pages = await loadPagesPromise;
     section.removeChild(loadPagesProgressElement);
-    const alphabeticalPaginationList = document.createElement('ul');
-    alphabeticalPaginationList.className = 'pagination-list';
-    table.insertAdjacentElement('beforebegin', alphabeticalPaginationList);
-    let previousLetter = undefined;
+    const artistMap = new Map();
     for (const page of pages) {
         for (const row of page.rows) {
             const formData = getFormData(row);
-            let letter = formData.get('artist_name_original').toString()[0].toUpperCase();
-            if (letter < 'A' || letter > 'Z') {
-                letter = '#';
-            }
-            if (letter !== previousLetter) {
-                const anchor = document.createElement('a');
-                anchor.href = '?page=' + page.pageNumber;
-                anchor.textContent = letter;
-                const listItem = document.createElement('li');
-                listItem.className = 'pagination-page';
-                if (page.pageNumber === currentPageNumber) {
-                    listItem.setAttribute('aria-current', 'page');
-                }
-                listItem.appendChild(anchor);
-                alphabeticalPaginationList.appendChild(listItem);
-                alphabeticalPaginationList.appendChild(document.createTextNode(' '));
-                previousLetter = letter;
+            const artistName = formData.get('artist_name_original').toString();
+            const key = artistName.toLowerCase();
+            if (!artistMap.has(key)) {
+                artistMap.set(key, { artistName, pageNumber: page.pageNumber });
             }
         }
     }
+    const artistSelect = document.createElement('select');
+    for (const value of artistMap.values()) {
+        const option = document.createElement('option');
+        option.text = value.artistName;
+        option.value = value.pageNumber.toString();
+        artistSelect.appendChild(option);
+    }
+    artistSelect.selectedIndex = -1;
+    artistSelect.addEventListener('change', () => {
+        const pageNumber = parseInt(artistSelect.value);
+        const anchor = document.createElement('a');
+        anchor.href = '/settings/subscription/automatic-edits?page=' + pageNumber;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+    });
+    viewAllButton.insertAdjacentElement('afterend', artistSelect);
+    viewAllButton.insertAdjacentText('afterend', ' Go to artist: ');
     viewAllButton.disabled = false;
     viewAllButton.addEventListener('click', async () => {
         if (pages.length >= 100 && !window.confirm(`You are about to view ${pages.length} pages at once. This might take a long time to load. Are you sure?`)) {
@@ -278,10 +279,10 @@ async function enhanceAutomaticEditsPage(element) {
                 await delay(1);
             }
         }
-        section.removeChild(viewAllButton);
     });
 }
 function enhanceTable(table) {
+    document.body.style.backgroundColor = '#fff';
     table.style.tableLayout = 'auto';
     const headerRow = table.tHead.rows[0];
     const body = table.tBodies[0];
@@ -328,6 +329,7 @@ function enhanceRow(row) {
     const albumName = formData.get('album_name').toString();
     const albumArtistName = formData.get('album_artist_name').toString();
     function emphasize(cell, content) {
+        var _a;
         cell.style.lineHeight = '1';
         cell.innerHTML = `
             <div>
@@ -339,7 +341,7 @@ function enhanceRow(row) {
                 </b>
             </div>
             <small>
-                Originally "${cell.textContent}"
+                Originally "${(_a = cell.textContent) === null || _a === void 0 ? void 0 : _a.trim()}"
             </small>`;
     }
     if (trackName !== formData.get('track_name_original')) {
