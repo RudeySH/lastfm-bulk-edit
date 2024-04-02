@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.4.0
+// @version 1.4.1
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -1042,8 +1042,9 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
     const album_artist_name_input = elements.album_artist_name;
     const tracks = augmentInput(scrobbleData, popup, track_name_input, 'tracks');
     augmentInput(scrobbleData, popup, artist_name_input, 'artists');
-    augmentInput(scrobbleData, popup, album_name_input, 'albums');
-    augmentInput(scrobbleData, popup, album_artist_name_input, 'album artists');
+    augmentInput(scrobbleData, popup, album_name_input, 'albums', album_artist_name_input);
+    augmentInput(scrobbleData, popup, album_artist_name_input, 'album artists', album_name_input);
+    // add information alert about album artists being kept in sync
     if (album_artist_name_input.placeholder === 'Mixed' && scrobbleData.some((s) => s.get('album_artist_name') === artist_name_input.value)) {
         const messageTemplate = document.createElement('template');
         messageTemplate.innerHTML = `
@@ -1115,8 +1116,12 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
         });
     });
     const distinctScrobbleData = [...distinctGroups].map(([_name, values]) => values[0]);
-    // set up the form submit event listener
+    // disable the submit button when the form has validation errors
     const submitButton = form.querySelector('button[type="submit"]');
+    form.addEventListener('input', () => {
+        submitButton.disabled = form.querySelector('.has-error') !== null;
+    });
+    // set up the form submit event listener
     submitButton.addEventListener('click', async (event) => {
         var _a, _b;
         event.preventDefault();
@@ -1222,7 +1227,7 @@ function observeChildList(target, selector) {
     });
 }
 // turns a normal input into an input that supports the "Mixed" state
-function augmentInput(scrobbleData, popup, input, plural) {
+function augmentInput(scrobbleData, popup, input, plural, otherInput) {
     var _a;
     const groups = [...groupBy(scrobbleData, (s) => s.get(input.name))].sort((a, b) => b[1].length - a[1].length);
     if (groups.length >= 2) {
@@ -1262,11 +1267,17 @@ function augmentInput(scrobbleData, popup, input, plural) {
             refreshFormGroupState();
         }
     });
+    otherInput === null || otherInput === void 0 ? void 0 : otherInput.addEventListener('input', () => {
+        refreshFormGroupState();
+    });
     function refreshFormGroupState() {
         formGroup.classList.remove('has-error');
         formGroup.classList.remove('has-success');
         if (input.value !== defaultValue || groups.length >= 2 && input.placeholder === '') {
-            if (input.value === '' && (input.name === 'track_name' || input.name === 'artist_name')) {
+            if (input.value === '' && (input.name === 'track_name'
+                || input.name === 'artist_name'
+                || input.name === 'album_name' && (!!otherInput.value || otherInput.placeholder === 'Mixed')
+                || input.name === 'album_artist_name' && !!otherInput.value || otherInput.placeholder === 'Mixed')) {
                 formGroup.classList.add('has-error');
             }
             else {

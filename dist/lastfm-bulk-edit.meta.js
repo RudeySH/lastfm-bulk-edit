@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.4.0
+// @version 1.4.1
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
