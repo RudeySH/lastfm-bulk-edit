@@ -1,6 +1,8 @@
 import he from 'he';
+import { Semaphore } from 'async-mutex';
 import { displayAlbumName } from './features/display-album-name';
 import { enhanceAutomaticEditsPage } from './features/enhance-automatic-edits-page';
+import { delay } from './utils/utils';
 
 const namespace = 'lastfm-bulk-edit';
 
@@ -338,22 +340,22 @@ function getEditScrobbleForm(url: string, row?: HTMLTableRowElement) {
                 const artist_name = (firstScrobbleData.get('album_artist_name') ?? firstScrobbleData.get('artist_name')!) as string;
 
                 return `
-                            <li>
-                                <div class="checkbox">
-                                    <label>
-                                        <input type="checkbox" name="key" value="${he.escape(key)}" ${currentAlbumKey === undefined || currentAlbumKey === key ? 'checked' : ''} />
-                                        <strong title="${he.escape(album_name ?? '')}" class="${namespace}-ellipsis ${currentAlbumKey === key ? `${namespace}-text-info` : !album_name ? `${namespace}-text-danger` : ''}">
-                                            ${album_name ? he.escape(album_name) : '<em>No Album</em>'}
-                                        </strong>
-                                        <div title="${he.escape(artist_name)}" class="${namespace}-ellipsis">
-                                            ${he.escape(artist_name)}
-                                        </div>
-                                        <small>
-                                            ${scrobbleData.length} scrobble${scrobbleData.length !== 1 ? 's' : ''}
-                                        </small>
-                                    </label>
+                    <li>
+                        <div class="checkbox">
+                            <label>
+                                <input type="checkbox" name="key" value="${he.escape(key)}" ${currentAlbumKey === undefined || currentAlbumKey === key ? 'checked' : ''} />
+                                <strong title="${he.escape(album_name ?? '')}" class="${namespace}-ellipsis ${currentAlbumKey === key ? `${namespace}-text-info` : !album_name ? `${namespace}-text-danger` : ''}">
+                                    ${album_name ? he.escape(album_name) : '<em>No Album</em>'}
+                                </strong>
+                                <div title="${he.escape(artist_name)}" class="${namespace}-ellipsis">
+                                    ${he.escape(artist_name)}
                                 </div>
-                            </li>`;
+                                <small>
+                                    ${scrobbleData.length} scrobble${scrobbleData.length !== 1 ? 's' : ''}
+                                </small>
+                            </label>
+                        </div>
+                    </li>`;
             }).join('')}
                 </ul>`;
 
@@ -464,7 +466,10 @@ class Modal<TOptions extends ModalOptions = ModalOptions> {
     protected options?: TOptions;
     private addedClass = false;
 
-    constructor(title: Element | string, body: Element | string, options?: ModalOptions) {
+    constructor(title: Element | string, body: Element | string, options?: TOptions) {
+        this.element = document.createElement('div');
+        this.options = options;
+
         const fragment = modalTemplate.content.cloneNode(true) as DocumentFragment;
 
         const modalTitle = fragment.querySelector('.modal-title')!;
@@ -480,8 +485,6 @@ class Modal<TOptions extends ModalOptions = ModalOptions> {
         } else {
             modalBody.insertAdjacentHTML('beforeend', body);
         }
-
-        this.element = document.createElement('div');
 
         if (options && options.dismissible) {
             // create X button that closes the modal
@@ -664,28 +667,69 @@ function getUrlType(url: string) {
     }
 }
 
+const semaphore = new Semaphore(6);
+let delayPromise: Promise<void> | undefined = undefined;
+let delayTooManyRequestsMs = 10000;
+
 async function fetchHTMLDocument(url: string) {
-    // retry 5 times with exponential timeout
-    for (let i = 0; i < 5; i++) {
-        if (i !== 0) {
-            // wait 2 seconds, then 4 seconds, then 8, finally 16 (30 seconds total)
-            await new Promise((resolve) => setTimeout(resolve, Math.pow(2, i)));
-        }
+    return await semaphore.runExclusive(async () => {
+        let delayResolver!: () => void;
+        let delayRejecter!: (reason: unknown) => void;
 
-        const response = await fetch(url);
+        try {
+            for (let i = 0; true; i++) {
+                const response = await fetch(url);
 
-        if (response.ok) {
-            const html = await response.text();
-            const doc = domParser.parseFromString(html, 'text/html');
+                if (response.ok) {
+                    const html = await response.text();
+                    const doc = domParser.parseFromString(html, 'text/html');
 
-            if (doc.querySelector('table.chartlist:not(.chartlist__placeholder)') || i === 4) {
-                return doc;
+                    if (doc.querySelector('table.chartlist:not(.chartlist__placeholder)') || i >= 5) {
+                        if (delayResolver !== undefined) {
+                            delayPromise = undefined;
+                            delayResolver();
+                        }
+
+                        return doc;
+                    }
+                }
+
+                if (delayPromise === undefined) {
+                    delayPromise = new Promise((resolve, reject) => {
+                        delayResolver = resolve;
+                        delayRejecter = reject;
+                    });
+
+                    if (response.status === 429) { // Too Many Requests
+                        await delay(delayTooManyRequestsMs);
+                    } else {
+                        await delay(1000);
+                    }
+                } else if (delayResolver !== undefined) {
+                    if (response.status === 429) { // Too Many Requests
+                        // retry after 10 seconds, then another 10 seconds, etc. up to 60 seconds, finally retry after every second.
+                        const additionalDelayMs = delayTooManyRequestsMs < 60000 ? 10000 : 1000;
+                        delayTooManyRequestsMs += additionalDelayMs;
+                        await delay(additionalDelayMs);
+                    } else if (i < 5) {
+                        // retry after 2 seconds, then 4 seconds, then 8, finally 16 (30 seconds total)
+                        await delay(Math.pow(2, i) * 1000);
+                    } else {
+                        abort();
+                        throw 'There was a problem loading your scrobbles, please try again later.';
+                    }
+                } else {
+                    await delayPromise;
+                }
             }
-        }
-    }
+        } catch (reason) {
+            if (delayRejecter !== undefined) {
+                delayRejecter(reason);
+            }
 
-    abort();
-    throw 'There was a problem loading your scrobbles, please try again later.';
+            throw reason;
+        }
+    });
 }
 
 let aborting = false;
@@ -772,10 +816,10 @@ async function augmentEditScrobbleForm(urlType: string, scrobbleData: FormData[]
     const album_name_input = elements.album_name;
     const album_artist_name_input = elements.album_artist_name;
 
-    const tracks = augmentInput(scrobbleData, popup, track_name_input, 'tracks');
-    augmentInput(scrobbleData, popup, artist_name_input, 'artists');
-    augmentInput(scrobbleData, popup, album_name_input, 'albums', album_artist_name_input);
-    augmentInput(scrobbleData, popup, album_artist_name_input, 'album artists', album_name_input);
+    const tracks = augmentInput(scrobbleData, popup, elements, track_name_input, 'tracks');
+    augmentInput(scrobbleData, popup, elements, artist_name_input, 'artists');
+    augmentInput(scrobbleData, popup, elements, album_name_input, 'albums');
+    augmentInput(scrobbleData, popup, elements, album_artist_name_input, 'album artists');
 
     // add information alert about album artists being kept in sync
     if (album_artist_name_input.placeholder === 'Mixed' && scrobbleData.some((s) => s.get('album_artist_name') === artist_name_input.value)) {
@@ -897,9 +941,9 @@ async function augmentEditScrobbleForm(urlType: string, scrobbleData: FormData[]
                 : album_artist_name;
 
             // check if anything changed compared to the original track, artist, album and album artist combination
-            if (track_name             !== null && track_name             !== track_name_original  ||
-                artist_name            !== null && artist_name            !== artist_name_original ||
-                album_name             !== null && album_name             !== album_name_original  ||
+            if (track_name !== null && track_name !== track_name_original ||
+                artist_name !== null && artist_name !== artist_name_original ||
+                album_name !== null && album_name !== album_name_original ||
                 album_artist_name_sync !== null && album_artist_name_sync !== album_artist_name_original) {
 
                 const clonedFormData = cloneFormData(formData);
@@ -991,7 +1035,7 @@ function observeChildList(target: Node, selector: string) {
 }
 
 // turns a normal input into an input that supports the "Mixed" state
-function augmentInput(scrobbleData: FormData[], popup: Element, input: HTMLInputElement, plural: string, otherInput?: HTMLInputElement) {
+function augmentInput(scrobbleData: FormData[], popup: Element, inputs: ScrobbleFormControlsCollection, input: HTMLInputElement, plural: string) {
     const groups = [...groupBy(scrobbleData, (s) => s.get(input.name))].sort((a, b) => b[1].length - a[1].length);
 
     if (groups.length >= 2) {
@@ -1041,25 +1085,32 @@ function augmentInput(scrobbleData: FormData[], popup: Element, input: HTMLInput
         }
     });
 
-    otherInput?.addEventListener('input', () => {
-        refreshFormGroupState();
-    });
+    if (input.name === 'album_name') {
+        inputs.album_artist_name.addEventListener('input', () => {
+            refreshFormGroupState();
+        });
+    } else if (input.name === 'album_artist_name') {
+        inputs.album_name.addEventListener('input', () => {
+            if (input.value === '' && inputs.album_name.value !== '') {
+                input.value = inputs.artist_name.value;
+            }
+            refreshFormGroupState();
+        });
+    }
 
     function refreshFormGroupState() {
         formGroup.classList.remove('has-error');
         formGroup.classList.remove('has-success');
 
-        if (input.value !== defaultValue || groups.length >= 2 && input.placeholder === '') {
-            if (input.value === '' && (
-                input.name === 'track_name'
-                || input.name === 'artist_name'
-                || input.name === 'album_name' && (!!otherInput!.value || otherInput!.placeholder === 'Mixed')
-                || input.name === 'album_artist_name' && !!otherInput!.value || otherInput!.placeholder === 'Mixed')
-            ) {
-                formGroup.classList.add('has-error');
-            } else {
-                formGroup.classList.add('has-success');
-            }
+        if (input.value === '' && (
+            input.name === 'track_name'
+            || input.name === 'artist_name'
+            || input.name === 'album_name' && (inputs.album_artist_name.value !== '' || inputs.album_artist_name.placeholder === 'Mixed')
+            || input.name === 'album_artist_name' && (inputs.album_name.value !== '' || inputs.album_name.placeholder === 'Mixed')
+        )) {
+            formGroup.classList.add('has-error');
+        } else if (input.value !== defaultValue || groups.length >= 2 && input.placeholder === '') {
+            formGroup.classList.add('has-success');
         }
     }
 

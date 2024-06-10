@@ -4,7 +4,7 @@ const { UserscriptPlugin } = require('webpack-userscript');
 var config = {
   entry: './src/index.ts',
   externals: {
-    he: 'he',
+    'he': 'he',
   },
   module: {
     rules: [

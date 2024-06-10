@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.4.1
+// @version 1.5.0
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -17,7 +17,412 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 433:
+/***/ 406:
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(653);
+var Semaphore_1 = __webpack_require__(919);
+var Mutex = /** @class */ (function () {
+    function Mutex(cancelError) {
+        this._semaphore = new Semaphore_1.default(1, cancelError);
+    }
+    Mutex.prototype.acquire = function () {
+        return tslib_1.__awaiter(this, arguments, void 0, function (priority) {
+            var _a, releaser;
+            if (priority === void 0) { priority = 0; }
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0: return [4 /*yield*/, this._semaphore.acquire(1, priority)];
+                    case 1:
+                        _a = _b.sent(), releaser = _a[1];
+                        return [2 /*return*/, releaser];
+                }
+            });
+        });
+    };
+    Mutex.prototype.runExclusive = function (callback, priority) {
+        if (priority === void 0) { priority = 0; }
+        return this._semaphore.runExclusive(function () { return callback(); }, 1, priority);
+    };
+    Mutex.prototype.isLocked = function () {
+        return this._semaphore.isLocked();
+    };
+    Mutex.prototype.waitForUnlock = function (priority) {
+        if (priority === void 0) { priority = 0; }
+        return this._semaphore.waitForUnlock(1, priority);
+    };
+    Mutex.prototype.release = function () {
+        if (this._semaphore.isLocked())
+            this._semaphore.release();
+    };
+    Mutex.prototype.cancel = function () {
+        return this._semaphore.cancel();
+    };
+    return Mutex;
+}());
+exports["default"] = Mutex;
+
+
+/***/ }),
+
+/***/ 919:
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(653);
+var errors_1 = __webpack_require__(586);
+var Semaphore = /** @class */ (function () {
+    function Semaphore(_value, _cancelError) {
+        if (_cancelError === void 0) { _cancelError = errors_1.E_CANCELED; }
+        this._value = _value;
+        this._cancelError = _cancelError;
+        this._queue = [];
+        this._weightedWaiters = [];
+    }
+    Semaphore.prototype.acquire = function (weight, priority) {
+        var _this = this;
+        if (weight === void 0) { weight = 1; }
+        if (priority === void 0) { priority = 0; }
+        if (weight <= 0)
+            throw new Error("invalid weight ".concat(weight, ": must be positive"));
+        return new Promise(function (resolve, reject) {
+            var task = { resolve: resolve, reject: reject, weight: weight, priority: priority };
+            var i = findIndexFromEnd(_this._queue, function (other) { return priority <= other.priority; });
+            if (i === -1 && weight <= _this._value) {
+                // Needs immediate dispatch, skip the queue
+                _this._dispatchItem(task);
+            }
+            else {
+                _this._queue.splice(i + 1, 0, task);
+            }
+        });
+    };
+    Semaphore.prototype.runExclusive = function (callback_1) {
+        return tslib_1.__awaiter(this, arguments, void 0, function (callback, weight, priority) {
+            var _a, value, release;
+            if (weight === void 0) { weight = 1; }
+            if (priority === void 0) { priority = 0; }
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0: return [4 /*yield*/, this.acquire(weight, priority)];
+                    case 1:
+                        _a = _b.sent(), value = _a[0], release = _a[1];
+                        _b.label = 2;
+                    case 2:
+                        _b.trys.push([2, , 4, 5]);
+                        return [4 /*yield*/, callback(value)];
+                    case 3: return [2 /*return*/, _b.sent()];
+                    case 4:
+                        release();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    Semaphore.prototype.waitForUnlock = function (weight, priority) {
+        var _this = this;
+        if (weight === void 0) { weight = 1; }
+        if (priority === void 0) { priority = 0; }
+        if (weight <= 0)
+            throw new Error("invalid weight ".concat(weight, ": must be positive"));
+        if (this._couldLockImmediately(weight, priority)) {
+            return Promise.resolve();
+        }
+        else {
+            return new Promise(function (resolve) {
+                if (!_this._weightedWaiters[weight - 1])
+                    _this._weightedWaiters[weight - 1] = [];
+                insertSorted(_this._weightedWaiters[weight - 1], { resolve: resolve, priority: priority });
+            });
+        }
+    };
+    Semaphore.prototype.isLocked = function () {
+        return this._value <= 0;
+    };
+    Semaphore.prototype.getValue = function () {
+        return this._value;
+    };
+    Semaphore.prototype.setValue = function (value) {
+        this._value = value;
+        this._dispatchQueue();
+    };
+    Semaphore.prototype.release = function (weight) {
+        if (weight === void 0) { weight = 1; }
+        if (weight <= 0)
+            throw new Error("invalid weight ".concat(weight, ": must be positive"));
+        this._value += weight;
+        this._dispatchQueue();
+    };
+    Semaphore.prototype.cancel = function () {
+        var _this = this;
+        this._queue.forEach(function (entry) { return entry.reject(_this._cancelError); });
+        this._queue = [];
+    };
+    Semaphore.prototype._dispatchQueue = function () {
+        this._drainUnlockWaiters();
+        while (this._queue.length > 0 && this._queue[0].weight <= this._value) {
+            this._dispatchItem(this._queue.shift());
+            this._drainUnlockWaiters();
+        }
+    };
+    Semaphore.prototype._dispatchItem = function (item) {
+        var previousValue = this._value;
+        this._value -= item.weight;
+        item.resolve([previousValue, this._newReleaser(item.weight)]);
+    };
+    Semaphore.prototype._newReleaser = function (weight) {
+        var _this = this;
+        var called = false;
+        return function () {
+            if (called)
+                return;
+            called = true;
+            _this.release(weight);
+        };
+    };
+    Semaphore.prototype._drainUnlockWaiters = function () {
+        if (this._queue.length === 0) {
+            for (var weight = this._value; weight > 0; weight--) {
+                var waiters = this._weightedWaiters[weight - 1];
+                if (!waiters)
+                    continue;
+                waiters.forEach(function (waiter) { return waiter.resolve(); });
+                this._weightedWaiters[weight - 1] = [];
+            }
+        }
+        else {
+            var queuedPriority_1 = this._queue[0].priority;
+            for (var weight = this._value; weight > 0; weight--) {
+                var waiters = this._weightedWaiters[weight - 1];
+                if (!waiters)
+                    continue;
+                var i = waiters.findIndex(function (waiter) { return waiter.priority <= queuedPriority_1; });
+                (i === -1 ? waiters : waiters.splice(0, i))
+                    .forEach((function (waiter) { return waiter.resolve(); }));
+            }
+        }
+    };
+    Semaphore.prototype._couldLockImmediately = function (weight, priority) {
+        return (this._queue.length === 0 || this._queue[0].priority < priority) &&
+            weight <= this._value;
+    };
+    return Semaphore;
+}());
+function insertSorted(a, v) {
+    var i = findIndexFromEnd(a, function (other) { return v.priority <= other.priority; });
+    a.splice(i + 1, 0, v);
+}
+function findIndexFromEnd(a, predicate) {
+    for (var i = a.length - 1; i >= 0; i--) {
+        if (predicate(a[i])) {
+            return i;
+        }
+    }
+    return -1;
+}
+exports["default"] = Semaphore;
+
+
+/***/ }),
+
+/***/ 586:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.E_CANCELED = exports.E_ALREADY_LOCKED = exports.E_TIMEOUT = void 0;
+exports.E_TIMEOUT = new Error('timeout while waiting for mutex to become available');
+exports.E_ALREADY_LOCKED = new Error('mutex already locked');
+exports.E_CANCELED = new Error('request for lock canceled');
+
+
+/***/ }),
+
+/***/ 693:
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.tryAcquire = exports.withTimeout = exports.Semaphore = exports.Mutex = void 0;
+var tslib_1 = __webpack_require__(653);
+var Mutex_1 = __webpack_require__(406);
+Object.defineProperty(exports, "Mutex", ({ enumerable: true, get: function () { return Mutex_1.default; } }));
+var Semaphore_1 = __webpack_require__(919);
+Object.defineProperty(exports, "Semaphore", ({ enumerable: true, get: function () { return Semaphore_1.default; } }));
+var withTimeout_1 = __webpack_require__(646);
+Object.defineProperty(exports, "withTimeout", ({ enumerable: true, get: function () { return withTimeout_1.withTimeout; } }));
+var tryAcquire_1 = __webpack_require__(746);
+Object.defineProperty(exports, "tryAcquire", ({ enumerable: true, get: function () { return tryAcquire_1.tryAcquire; } }));
+tslib_1.__exportStar(__webpack_require__(586), exports);
+
+
+/***/ }),
+
+/***/ 746:
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.tryAcquire = void 0;
+var errors_1 = __webpack_require__(586);
+var withTimeout_1 = __webpack_require__(646);
+// eslint-disable-next-lisne @typescript-eslint/explicit-module-boundary-types
+function tryAcquire(sync, alreadyAcquiredError) {
+    if (alreadyAcquiredError === void 0) { alreadyAcquiredError = errors_1.E_ALREADY_LOCKED; }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (0, withTimeout_1.withTimeout)(sync, 0, alreadyAcquiredError);
+}
+exports.tryAcquire = tryAcquire;
+
+
+/***/ }),
+
+/***/ 646:
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.withTimeout = void 0;
+var tslib_1 = __webpack_require__(653);
+/* eslint-disable @typescript-eslint/no-explicit-any */
+var errors_1 = __webpack_require__(586);
+function withTimeout(sync, timeout, timeoutError) {
+    var _this = this;
+    if (timeoutError === void 0) { timeoutError = errors_1.E_TIMEOUT; }
+    return {
+        acquire: function (weightOrPriority, priority) {
+            var weight;
+            if (isSemaphore(sync)) {
+                weight = weightOrPriority;
+            }
+            else {
+                weight = undefined;
+                priority = weightOrPriority;
+            }
+            if (weight !== undefined && weight <= 0) {
+                throw new Error("invalid weight ".concat(weight, ": must be positive"));
+            }
+            return new Promise(function (resolve, reject) { return tslib_1.__awaiter(_this, void 0, void 0, function () {
+                var isTimeout, handle, ticket, release, e_1;
+                return tslib_1.__generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            isTimeout = false;
+                            handle = setTimeout(function () {
+                                isTimeout = true;
+                                reject(timeoutError);
+                            }, timeout);
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 3, , 4]);
+                            return [4 /*yield*/, (isSemaphore(sync)
+                                    ? sync.acquire(weight, priority)
+                                    : sync.acquire(priority))];
+                        case 2:
+                            ticket = _a.sent();
+                            if (isTimeout) {
+                                release = Array.isArray(ticket) ? ticket[1] : ticket;
+                                release();
+                            }
+                            else {
+                                clearTimeout(handle);
+                                resolve(ticket);
+                            }
+                            return [3 /*break*/, 4];
+                        case 3:
+                            e_1 = _a.sent();
+                            if (!isTimeout) {
+                                clearTimeout(handle);
+                                reject(e_1);
+                            }
+                            return [3 /*break*/, 4];
+                        case 4: return [2 /*return*/];
+                    }
+                });
+            }); });
+        },
+        runExclusive: function (callback, weight, priority) {
+            return tslib_1.__awaiter(this, void 0, void 0, function () {
+                var release, ticket;
+                return tslib_1.__generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            release = function () { return undefined; };
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, , 7, 8]);
+                            return [4 /*yield*/, this.acquire(weight, priority)];
+                        case 2:
+                            ticket = _a.sent();
+                            if (!Array.isArray(ticket)) return [3 /*break*/, 4];
+                            release = ticket[1];
+                            return [4 /*yield*/, callback(ticket[0])];
+                        case 3: return [2 /*return*/, _a.sent()];
+                        case 4:
+                            release = ticket;
+                            return [4 /*yield*/, callback()];
+                        case 5: return [2 /*return*/, _a.sent()];
+                        case 6: return [3 /*break*/, 8];
+                        case 7:
+                            release();
+                            return [7 /*endfinally*/];
+                        case 8: return [2 /*return*/];
+                    }
+                });
+            });
+        },
+        release: function (weight) {
+            sync.release(weight);
+        },
+        cancel: function () {
+            return sync.cancel();
+        },
+        waitForUnlock: function (weightOrPriority, priority) {
+            var weight;
+            if (isSemaphore(sync)) {
+                weight = weightOrPriority;
+            }
+            else {
+                weight = undefined;
+                priority = weightOrPriority;
+            }
+            if (weight !== undefined && weight <= 0) {
+                throw new Error("invalid weight ".concat(weight, ": must be positive"));
+            }
+            return new Promise(function (resolve, reject) {
+                var handle = setTimeout(function () { return reject(timeoutError); }, timeout);
+                (isSemaphore(sync)
+                    ? sync.waitForUnlock(weight, priority)
+                    : sync.waitForUnlock(priority)).then(function () {
+                    clearTimeout(handle);
+                    resolve();
+                });
+            });
+        },
+        isLocked: function () { return sync.isLocked(); },
+        getValue: function () { return sync.getValue(); },
+        setValue: function (value) { return sync.setValue(value); },
+    };
+}
+exports.withTimeout = withTimeout;
+function isSemaphore(sync) {
+    return sync.getValue !== undefined;
+}
+
+
+/***/ }),
+
+/***/ 692:
 /***/ ((module) => {
 
 async function* asyncPool(concurrency, iterable, iteratorFn) {
@@ -47,74 +452,15 @@ async function* asyncPool(concurrency, iterable, iteratorFn) {
 module.exports = asyncPool;
 
 
-/***/ })
+/***/ }),
 
-/******/ 	});
-/************************************************************************/
-/******/ 	// The module cache
-/******/ 	var __webpack_module_cache__ = {};
-/******/ 	
-/******/ 	// The require function
-/******/ 	function __webpack_require__(moduleId) {
-/******/ 		// Check if module is in cache
-/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
-/******/ 		if (cachedModule !== undefined) {
-/******/ 			return cachedModule.exports;
-/******/ 		}
-/******/ 		// Create a new module (and put it into the cache)
-/******/ 		var module = __webpack_module_cache__[moduleId] = {
-/******/ 			// no module.id needed
-/******/ 			// no module.loaded needed
-/******/ 			exports: {}
-/******/ 		};
-/******/ 	
-/******/ 		// Execute the module function
-/******/ 		__webpack_modules__[moduleId](module, module.exports, __webpack_require__);
-/******/ 	
-/******/ 		// Return the exports of the module
-/******/ 		return module.exports;
-/******/ 	}
-/******/ 	
-/************************************************************************/
-/******/ 	/* webpack/runtime/compat get default export */
-/******/ 	(() => {
-/******/ 		// getDefaultExport function for compatibility with non-harmony modules
-/******/ 		__webpack_require__.n = (module) => {
-/******/ 			var getter = module && module.__esModule ?
-/******/ 				() => (module['default']) :
-/******/ 				() => (module);
-/******/ 			__webpack_require__.d(getter, { a: getter });
-/******/ 			return getter;
-/******/ 		};
-/******/ 	})();
-/******/ 	
-/******/ 	/* webpack/runtime/define property getters */
-/******/ 	(() => {
-/******/ 		// define getter functions for harmony exports
-/******/ 		__webpack_require__.d = (exports, definition) => {
-/******/ 			for(var key in definition) {
-/******/ 				if(__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) {
-/******/ 					Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
-/******/ 				}
-/******/ 			}
-/******/ 		};
-/******/ 	})();
-/******/ 	
-/******/ 	/* webpack/runtime/hasOwnProperty shorthand */
-/******/ 	(() => {
-/******/ 		__webpack_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
-/******/ 	})();
-/******/ 	
-/************************************************************************/
-var __webpack_exports__ = {};
-// This entry need to be wrapped in an IIFE because it need to be in strict mode.
-(() => {
+/***/ 308:
+/***/ ((__unused_webpack_module, exports) => {
+
 "use strict";
 
-;// CONCATENATED MODULE: external "he"
-const external_he_namespaceObject = he;
-var external_he_default = /*#__PURE__*/__webpack_require__.n(external_he_namespaceObject);
-;// CONCATENATED MODULE: ./src/features/display-album-name.ts
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.displayAlbumName = void 0;
 async function displayAlbumName(element) {
     var _a;
     const rows = element instanceof HTMLTableRowElement ? [element] : [...element.querySelectorAll('tr')];
@@ -182,12 +528,22 @@ async function displayAlbumName(element) {
         }
     }
 }
+exports.displayAlbumName = displayAlbumName;
 
-// EXTERNAL MODULE: ./node_modules/tiny-async-pool/lib/es9.js
-var es9 = __webpack_require__(433);
-var es9_default = /*#__PURE__*/__webpack_require__.n(es9);
-;// CONCATENATED MODULE: ./src/features/enhance-automatic-edits-page.ts
 
+/***/ }),
+
+/***/ 252:
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.enhanceAutomaticEditsPage = void 0;
+const tiny_async_pool_1 = __importDefault(__webpack_require__(692));
 const viewAllButtonTemplate = document.createElement('template');
 viewAllButtonTemplate.innerHTML = `
     <button type="button" class="btn-primary" disabled>
@@ -281,6 +637,7 @@ async function enhanceAutomaticEditsPage(element) {
         }
     });
 }
+exports.enhanceAutomaticEditsPage = enhanceAutomaticEditsPage;
 function enhanceTable(table) {
     document.body.style.backgroundColor = '#fff';
     table.style.tableLayout = 'auto';
@@ -368,7 +725,7 @@ async function loadPages(table, currentPageNumber, pageCount) {
     const pages = [{ pageNumber: currentPageNumber, rows: [...table.tBodies[0].rows] }];
     const pageNumbersToLoad = [...Array(pageCount).keys()].map(i => i + 1).filter(i => i !== currentPageNumber);
     updateProgress(1, pageCount);
-    for await (const page of es9_default()(6, pageNumbersToLoad, loadPage)) {
+    for await (const page of (0, tiny_async_pool_1.default)(6, pageNumbersToLoad, loadPage)) {
         pages.push(page);
         updateProgress(pages.length, pageCount);
     }
@@ -398,17 +755,30 @@ function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-;// CONCATENATED MODULE: ./src/index.ts
 
+/***/ }),
 
+/***/ 156:
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+const he_1 = __importDefault(__webpack_require__(488));
+const async_mutex_1 = __webpack_require__(693);
+const display_album_name_1 = __webpack_require__(308);
+const enhance_automatic_edits_page_1 = __webpack_require__(252);
+const utils_1 = __webpack_require__(135);
 const namespace = 'lastfm-bulk-edit';
 // use the top-right link to determine the current user
 const authLink = document.querySelector('a.auth-link');
 // https://regex101.com/r/UCmC8f/1
 const albumRegExp = new RegExp(`^${authLink === null || authLink === void 0 ? void 0 : authLink.href}/library/music(/\\+[^/]*)*(/[^+][^/]*){2}$`);
 const artistRegExp = new RegExp(`^${authLink === null || authLink === void 0 ? void 0 : authLink.href}/library/music(/\\+[^/]*)*(/[^+][^/]*){1}(/\\+[^/]*)?$`);
-const src_domParser = new DOMParser();
+const domParser = new DOMParser();
 const editScrobbleFormTemplate = document.createElement('template');
 editScrobbleFormTemplate.innerHTML = `
     <form method="POST" action="${authLink === null || authLink === void 0 ? void 0 : authLink.href}/library/edit?edited-variation=library-track-scrobble" data-edit-scrobble data-edit-scrobbles>
@@ -443,8 +813,8 @@ if (authLink) {
 function initialize() {
     appendStyle();
     appendEditScrobbleHeaderLinkAndMenuItems(document.body);
-    displayAlbumName(document.body);
-    enhanceAutomaticEditsPage(document.body);
+    (0, display_album_name_1.displayAlbumName)(document.body);
+    (0, enhance_automatic_edits_page_1.enhanceAutomaticEditsPage)(document.body);
     // use MutationObserver because Last.fm is a single-page application
     const observer = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
@@ -455,8 +825,8 @@ function initialize() {
                     }
                     node.setAttribute('data-processed', 'true');
                     appendEditScrobbleHeaderLinkAndMenuItems(node);
-                    displayAlbumName(node);
-                    enhanceAutomaticEditsPage(node);
+                    (0, display_album_name_1.displayAlbumName)(node);
+                    (0, enhance_automatic_edits_page_1.enhanceAutomaticEditsPage)(node);
                 }
             }
         }
@@ -701,22 +1071,22 @@ function getEditScrobbleForm(url, row) {
                 const album_name = firstScrobbleData.get('album_name');
                 const artist_name = ((_a = firstScrobbleData.get('album_artist_name')) !== null && _a !== void 0 ? _a : firstScrobbleData.get('artist_name'));
                 return `
-                            <li>
-                                <div class="checkbox">
-                                    <label>
-                                        <input type="checkbox" name="key" value="${external_he_default().escape(key)}" ${currentAlbumKey === undefined || currentAlbumKey === key ? 'checked' : ''} />
-                                        <strong title="${external_he_default().escape(album_name !== null && album_name !== void 0 ? album_name : '')}" class="${namespace}-ellipsis ${currentAlbumKey === key ? `${namespace}-text-info` : !album_name ? `${namespace}-text-danger` : ''}">
-                                            ${album_name ? external_he_default().escape(album_name) : '<em>No Album</em>'}
-                                        </strong>
-                                        <div title="${external_he_default().escape(artist_name)}" class="${namespace}-ellipsis">
-                                            ${external_he_default().escape(artist_name)}
-                                        </div>
-                                        <small>
-                                            ${scrobbleData.length} scrobble${scrobbleData.length !== 1 ? 's' : ''}
-                                        </small>
-                                    </label>
+                    <li>
+                        <div class="checkbox">
+                            <label>
+                                <input type="checkbox" name="key" value="${he_1.default.escape(key)}" ${currentAlbumKey === undefined || currentAlbumKey === key ? 'checked' : ''} />
+                                <strong title="${he_1.default.escape(album_name !== null && album_name !== void 0 ? album_name : '')}" class="${namespace}-ellipsis ${currentAlbumKey === key ? `${namespace}-text-info` : !album_name ? `${namespace}-text-danger` : ''}">
+                                    ${album_name ? he_1.default.escape(album_name) : '<em>No Album</em>'}
+                                </strong>
+                                <div title="${he_1.default.escape(artist_name)}" class="${namespace}-ellipsis">
+                                    ${he_1.default.escape(artist_name)}
                                 </div>
-                            </li>`;
+                                <small>
+                                    ${scrobbleData.length} scrobble${scrobbleData.length !== 1 ? 's' : ''}
+                                </small>
+                            </label>
+                        </div>
+                    </li>`;
             }).join('')}
                 </ul>`;
             const checkboxes = body.querySelectorAll('input[type="checkbox"]');
@@ -732,7 +1102,7 @@ function getEditScrobbleForm(url, row) {
             });
             let formData;
             try {
-                formData = await src_prompt('Select Albums To Edit', body);
+                formData = await prompt('Select Albums To Edit', body);
             }
             catch (error) {
                 return; // user canceled the album selection dialog
@@ -755,7 +1125,7 @@ function getEditScrobbleForm(url, row) {
     return form;
 }
 // shows a form dialog and resolves its promise on submit
-function src_prompt(title, body) {
+function prompt(title, body) {
     return new Promise((resolve, reject) => {
         const form = document.createElement('form');
         form.className = 'form-horizontal';
@@ -797,6 +1167,8 @@ function src_prompt(title, body) {
 class Modal {
     constructor(title, body, options) {
         this.addedClass = false;
+        this.element = document.createElement('div');
+        this.options = options;
         const fragment = modalTemplate.content.cloneNode(true);
         const modalTitle = fragment.querySelector('.modal-title');
         if (title instanceof Element) {
@@ -812,7 +1184,6 @@ class Modal {
         else {
             modalBody.insertAdjacentHTML('beforeend', body);
         }
-        this.element = document.createElement('div');
         if (options && options.dismissible) {
             // create X button that closes the modal
             const closeButton = document.createElement('button');
@@ -961,24 +1332,67 @@ function getUrlType(url) {
         return 'track';
     }
 }
+const semaphore = new async_mutex_1.Semaphore(6);
+let delayPromise = undefined;
+let delayTooManyRequestsMs = 10000;
 async function fetchHTMLDocument(url) {
-    // retry 5 times with exponential timeout
-    for (let i = 0; i < 5; i++) {
-        if (i !== 0) {
-            // wait 2 seconds, then 4 seconds, then 8, finally 16 (30 seconds total)
-            await new Promise((resolve) => setTimeout(resolve, Math.pow(2, i)));
-        }
-        const response = await fetch(url);
-        if (response.ok) {
-            const html = await response.text();
-            const doc = src_domParser.parseFromString(html, 'text/html');
-            if (doc.querySelector('table.chartlist:not(.chartlist__placeholder)') || i === 4) {
-                return doc;
+    return await semaphore.runExclusive(async () => {
+        let delayResolver;
+        let delayRejecter;
+        try {
+            for (let i = 0; true; i++) {
+                const response = await fetch(url);
+                if (response.ok) {
+                    const html = await response.text();
+                    const doc = domParser.parseFromString(html, 'text/html');
+                    if (doc.querySelector('table.chartlist:not(.chartlist__placeholder)') || i >= 5) {
+                        if (delayResolver !== undefined) {
+                            delayPromise = undefined;
+                            delayResolver();
+                        }
+                        return doc;
+                    }
+                }
+                if (delayPromise === undefined) {
+                    delayPromise = new Promise((resolve, reject) => {
+                        delayResolver = resolve;
+                        delayRejecter = reject;
+                    });
+                    if (response.status === 429) { // Too Many Requests
+                        await (0, utils_1.delay)(delayTooManyRequestsMs);
+                    }
+                    else {
+                        await (0, utils_1.delay)(1000);
+                    }
+                }
+                else if (delayResolver !== undefined) {
+                    if (response.status === 429) { // Too Many Requests
+                        // retry after 10 seconds, then another 10 seconds, etc. up to 60 seconds, finally retry after every second.
+                        const additionalDelayMs = delayTooManyRequestsMs < 60000 ? 10000 : 1000;
+                        delayTooManyRequestsMs += additionalDelayMs;
+                        await (0, utils_1.delay)(additionalDelayMs);
+                    }
+                    else if (i < 5) {
+                        // retry after 2 seconds, then 4 seconds, then 8, finally 16 (30 seconds total)
+                        await (0, utils_1.delay)(Math.pow(2, i) * 1000);
+                    }
+                    else {
+                        abort();
+                        throw 'There was a problem loading your scrobbles, please try again later.';
+                    }
+                }
+                else {
+                    await delayPromise;
+                }
             }
         }
-    }
-    abort();
-    throw 'There was a problem loading your scrobbles, please try again later.';
+        catch (reason) {
+            if (delayRejecter !== undefined) {
+                delayRejecter(reason);
+            }
+            throw reason;
+        }
+    });
 }
 let aborting = false;
 function abort() {
@@ -1040,10 +1454,10 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
     const artist_name_input = elements.artist_name;
     const album_name_input = elements.album_name;
     const album_artist_name_input = elements.album_artist_name;
-    const tracks = augmentInput(scrobbleData, popup, track_name_input, 'tracks');
-    augmentInput(scrobbleData, popup, artist_name_input, 'artists');
-    augmentInput(scrobbleData, popup, album_name_input, 'albums', album_artist_name_input);
-    augmentInput(scrobbleData, popup, album_artist_name_input, 'album artists', album_name_input);
+    const tracks = augmentInput(scrobbleData, popup, elements, track_name_input, 'tracks');
+    augmentInput(scrobbleData, popup, elements, artist_name_input, 'artists');
+    augmentInput(scrobbleData, popup, elements, album_name_input, 'albums');
+    augmentInput(scrobbleData, popup, elements, album_artist_name_input, 'album artists');
     // add information alert about album artists being kept in sync
     if (album_artist_name_input.placeholder === 'Mixed' && scrobbleData.some((s) => s.get('album_artist_name') === artist_name_input.value)) {
         const messageTemplate = document.createElement('template');
@@ -1200,7 +1614,7 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
             const response = await fetch(form.action, { method: 'POST', body: body });
             const html = await response.text();
             // use DOMParser to check the response for alerts
-            const placeholder = src_domParser.parseFromString(html, 'text/html');
+            const placeholder = domParser.parseFromString(html, 'text/html');
             for (const message of placeholder.querySelectorAll('.alert-danger')) {
                 alert(message.textContent.trim()); // TODO: pretty validation messages
             }
@@ -1227,7 +1641,7 @@ function observeChildList(target, selector) {
     });
 }
 // turns a normal input into an input that supports the "Mixed" state
-function augmentInput(scrobbleData, popup, input, plural, otherInput) {
+function augmentInput(scrobbleData, popup, inputs, input, plural) {
     var _a;
     const groups = [...groupBy(scrobbleData, (s) => s.get(input.name))].sort((a, b) => b[1].length - a[1].length);
     if (groups.length >= 2) {
@@ -1267,22 +1681,30 @@ function augmentInput(scrobbleData, popup, input, plural, otherInput) {
             refreshFormGroupState();
         }
     });
-    otherInput === null || otherInput === void 0 ? void 0 : otherInput.addEventListener('input', () => {
-        refreshFormGroupState();
-    });
+    if (input.name === 'album_name') {
+        inputs.album_artist_name.addEventListener('input', () => {
+            refreshFormGroupState();
+        });
+    }
+    else if (input.name === 'album_artist_name') {
+        inputs.album_name.addEventListener('input', () => {
+            if (input.value === '' && inputs.album_name.value !== '') {
+                input.value = inputs.artist_name.value;
+            }
+            refreshFormGroupState();
+        });
+    }
     function refreshFormGroupState() {
         formGroup.classList.remove('has-error');
         formGroup.classList.remove('has-success');
-        if (input.value !== defaultValue || groups.length >= 2 && input.placeholder === '') {
-            if (input.value === '' && (input.name === 'track_name'
-                || input.name === 'artist_name'
-                || input.name === 'album_name' && (!!otherInput.value || otherInput.placeholder === 'Mixed')
-                || input.name === 'album_artist_name' && !!otherInput.value || otherInput.placeholder === 'Mixed')) {
-                formGroup.classList.add('has-error');
-            }
-            else {
-                formGroup.classList.add('has-success');
-            }
+        if (input.value === '' && (input.name === 'track_name'
+            || input.name === 'artist_name'
+            || input.name === 'album_name' && (inputs.album_artist_name.value !== '' || inputs.album_artist_name.placeholder === 'Mixed')
+            || input.name === 'album_artist_name' && (inputs.album_name.value !== '' || inputs.album_name.placeholder === 'Mixed'))) {
+            formGroup.classList.add('has-error');
+        }
+        else if (input.value !== defaultValue || groups.length >= 2 && input.placeholder === '') {
+            formGroup.classList.add('has-success');
         }
     }
     return groups.length;
@@ -1312,7 +1734,509 @@ function cloneFormData(formData) {
     return clonedFormData;
 }
 
-})();
 
+/***/ }),
+
+/***/ 135:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.delay = void 0;
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+exports.delay = delay;
+
+
+/***/ }),
+
+/***/ 488:
+/***/ ((module) => {
+
+"use strict";
+module.exports = he;
+
+/***/ }),
+
+/***/ 653:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   __addDisposableResource: () => (/* binding */ __addDisposableResource),
+/* harmony export */   __assign: () => (/* binding */ __assign),
+/* harmony export */   __asyncDelegator: () => (/* binding */ __asyncDelegator),
+/* harmony export */   __asyncGenerator: () => (/* binding */ __asyncGenerator),
+/* harmony export */   __asyncValues: () => (/* binding */ __asyncValues),
+/* harmony export */   __await: () => (/* binding */ __await),
+/* harmony export */   __awaiter: () => (/* binding */ __awaiter),
+/* harmony export */   __classPrivateFieldGet: () => (/* binding */ __classPrivateFieldGet),
+/* harmony export */   __classPrivateFieldIn: () => (/* binding */ __classPrivateFieldIn),
+/* harmony export */   __classPrivateFieldSet: () => (/* binding */ __classPrivateFieldSet),
+/* harmony export */   __createBinding: () => (/* binding */ __createBinding),
+/* harmony export */   __decorate: () => (/* binding */ __decorate),
+/* harmony export */   __disposeResources: () => (/* binding */ __disposeResources),
+/* harmony export */   __esDecorate: () => (/* binding */ __esDecorate),
+/* harmony export */   __exportStar: () => (/* binding */ __exportStar),
+/* harmony export */   __extends: () => (/* binding */ __extends),
+/* harmony export */   __generator: () => (/* binding */ __generator),
+/* harmony export */   __importDefault: () => (/* binding */ __importDefault),
+/* harmony export */   __importStar: () => (/* binding */ __importStar),
+/* harmony export */   __makeTemplateObject: () => (/* binding */ __makeTemplateObject),
+/* harmony export */   __metadata: () => (/* binding */ __metadata),
+/* harmony export */   __param: () => (/* binding */ __param),
+/* harmony export */   __propKey: () => (/* binding */ __propKey),
+/* harmony export */   __read: () => (/* binding */ __read),
+/* harmony export */   __rest: () => (/* binding */ __rest),
+/* harmony export */   __runInitializers: () => (/* binding */ __runInitializers),
+/* harmony export */   __setFunctionName: () => (/* binding */ __setFunctionName),
+/* harmony export */   __spread: () => (/* binding */ __spread),
+/* harmony export */   __spreadArray: () => (/* binding */ __spreadArray),
+/* harmony export */   __spreadArrays: () => (/* binding */ __spreadArrays),
+/* harmony export */   __values: () => (/* binding */ __values),
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+/******************************************************************************
+Copyright (c) Microsoft Corporation.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+***************************************************************************** */
+/* global Reflect, Promise, SuppressedError, Symbol */
+
+var extendStatics = function(d, b) {
+  extendStatics = Object.setPrototypeOf ||
+      ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+      function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+  return extendStatics(d, b);
+};
+
+function __extends(d, b) {
+  if (typeof b !== "function" && b !== null)
+      throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+  extendStatics(d, b);
+  function __() { this.constructor = d; }
+  d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+}
+
+var __assign = function() {
+  __assign = Object.assign || function __assign(t) {
+      for (var s, i = 1, n = arguments.length; i < n; i++) {
+          s = arguments[i];
+          for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p)) t[p] = s[p];
+      }
+      return t;
+  }
+  return __assign.apply(this, arguments);
+}
+
+function __rest(s, e) {
+  var t = {};
+  for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+      t[p] = s[p];
+  if (s != null && typeof Object.getOwnPropertySymbols === "function")
+      for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+          if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+              t[p[i]] = s[p[i]];
+      }
+  return t;
+}
+
+function __decorate(decorators, target, key, desc) {
+  var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+  if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+  else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+  return c > 3 && r && Object.defineProperty(target, key, r), r;
+}
+
+function __param(paramIndex, decorator) {
+  return function (target, key) { decorator(target, key, paramIndex); }
+}
+
+function __esDecorate(ctor, descriptorIn, decorators, contextIn, initializers, extraInitializers) {
+  function accept(f) { if (f !== void 0 && typeof f !== "function") throw new TypeError("Function expected"); return f; }
+  var kind = contextIn.kind, key = kind === "getter" ? "get" : kind === "setter" ? "set" : "value";
+  var target = !descriptorIn && ctor ? contextIn["static"] ? ctor : ctor.prototype : null;
+  var descriptor = descriptorIn || (target ? Object.getOwnPropertyDescriptor(target, contextIn.name) : {});
+  var _, done = false;
+  for (var i = decorators.length - 1; i >= 0; i--) {
+      var context = {};
+      for (var p in contextIn) context[p] = p === "access" ? {} : contextIn[p];
+      for (var p in contextIn.access) context.access[p] = contextIn.access[p];
+      context.addInitializer = function (f) { if (done) throw new TypeError("Cannot add initializers after decoration has completed"); extraInitializers.push(accept(f || null)); };
+      var result = (0, decorators[i])(kind === "accessor" ? { get: descriptor.get, set: descriptor.set } : descriptor[key], context);
+      if (kind === "accessor") {
+          if (result === void 0) continue;
+          if (result === null || typeof result !== "object") throw new TypeError("Object expected");
+          if (_ = accept(result.get)) descriptor.get = _;
+          if (_ = accept(result.set)) descriptor.set = _;
+          if (_ = accept(result.init)) initializers.unshift(_);
+      }
+      else if (_ = accept(result)) {
+          if (kind === "field") initializers.unshift(_);
+          else descriptor[key] = _;
+      }
+  }
+  if (target) Object.defineProperty(target, contextIn.name, descriptor);
+  done = true;
+};
+
+function __runInitializers(thisArg, initializers, value) {
+  var useValue = arguments.length > 2;
+  for (var i = 0; i < initializers.length; i++) {
+      value = useValue ? initializers[i].call(thisArg, value) : initializers[i].call(thisArg);
+  }
+  return useValue ? value : void 0;
+};
+
+function __propKey(x) {
+  return typeof x === "symbol" ? x : "".concat(x);
+};
+
+function __setFunctionName(f, name, prefix) {
+  if (typeof name === "symbol") name = name.description ? "[".concat(name.description, "]") : "";
+  return Object.defineProperty(f, "name", { configurable: true, value: prefix ? "".concat(prefix, " ", name) : name });
+};
+
+function __metadata(metadataKey, metadataValue) {
+  if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(metadataKey, metadataValue);
+}
+
+function __awaiter(thisArg, _arguments, P, generator) {
+  function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+  return new (P || (P = Promise))(function (resolve, reject) {
+      function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+      function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+      function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+      step((generator = generator.apply(thisArg, _arguments || [])).next());
+  });
+}
+
+function __generator(thisArg, body) {
+  var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+  return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+  function verb(n) { return function (v) { return step([n, v]); }; }
+  function step(op) {
+      if (f) throw new TypeError("Generator is already executing.");
+      while (g && (g = 0, op[0] && (_ = 0)), _) try {
+          if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+          if (y = 0, t) op = [op[0] & 2, t.value];
+          switch (op[0]) {
+              case 0: case 1: t = op; break;
+              case 4: _.label++; return { value: op[1], done: false };
+              case 5: _.label++; y = op[1]; op = [0]; continue;
+              case 7: op = _.ops.pop(); _.trys.pop(); continue;
+              default:
+                  if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                  if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                  if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                  if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                  if (t[2]) _.ops.pop();
+                  _.trys.pop(); continue;
+          }
+          op = body.call(thisArg, _);
+      } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+      if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+  }
+}
+
+var __createBinding = Object.create ? (function(o, m, k, k2) {
+  if (k2 === undefined) k2 = k;
+  var desc = Object.getOwnPropertyDescriptor(m, k);
+  if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+  }
+  Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+  if (k2 === undefined) k2 = k;
+  o[k2] = m[k];
+});
+
+function __exportStar(m, o) {
+  for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(o, p)) __createBinding(o, m, p);
+}
+
+function __values(o) {
+  var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
+  if (m) return m.call(o);
+  if (o && typeof o.length === "number") return {
+      next: function () {
+          if (o && i >= o.length) o = void 0;
+          return { value: o && o[i++], done: !o };
+      }
+  };
+  throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
+}
+
+function __read(o, n) {
+  var m = typeof Symbol === "function" && o[Symbol.iterator];
+  if (!m) return o;
+  var i = m.call(o), r, ar = [], e;
+  try {
+      while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
+  }
+  catch (error) { e = { error: error }; }
+  finally {
+      try {
+          if (r && !r.done && (m = i["return"])) m.call(i);
+      }
+      finally { if (e) throw e.error; }
+  }
+  return ar;
+}
+
+/** @deprecated */
+function __spread() {
+  for (var ar = [], i = 0; i < arguments.length; i++)
+      ar = ar.concat(__read(arguments[i]));
+  return ar;
+}
+
+/** @deprecated */
+function __spreadArrays() {
+  for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+  for (var r = Array(s), k = 0, i = 0; i < il; i++)
+      for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+          r[k] = a[j];
+  return r;
+}
+
+function __spreadArray(to, from, pack) {
+  if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+      if (ar || !(i in from)) {
+          if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+          ar[i] = from[i];
+      }
+  }
+  return to.concat(ar || Array.prototype.slice.call(from));
+}
+
+function __await(v) {
+  return this instanceof __await ? (this.v = v, this) : new __await(v);
+}
+
+function __asyncGenerator(thisArg, _arguments, generator) {
+  if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+  var g = generator.apply(thisArg, _arguments || []), i, q = [];
+  return i = {}, verb("next"), verb("throw"), verb("return", awaitReturn), i[Symbol.asyncIterator] = function () { return this; }, i;
+  function awaitReturn(f) { return function (v) { return Promise.resolve(v).then(f, reject); }; }
+  function verb(n, f) { if (g[n]) { i[n] = function (v) { return new Promise(function (a, b) { q.push([n, v, a, b]) > 1 || resume(n, v); }); }; if (f) i[n] = f(i[n]); } }
+  function resume(n, v) { try { step(g[n](v)); } catch (e) { settle(q[0][3], e); } }
+  function step(r) { r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject) : settle(q[0][2], r); }
+  function fulfill(value) { resume("next", value); }
+  function reject(value) { resume("throw", value); }
+  function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
+}
+
+function __asyncDelegator(o) {
+  var i, p;
+  return i = {}, verb("next"), verb("throw", function (e) { throw e; }), verb("return"), i[Symbol.iterator] = function () { return this; }, i;
+  function verb(n, f) { i[n] = o[n] ? function (v) { return (p = !p) ? { value: __await(o[n](v)), done: false } : f ? f(v) : v; } : f; }
+}
+
+function __asyncValues(o) {
+  if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+  var m = o[Symbol.asyncIterator], i;
+  return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+  function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+  function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+}
+
+function __makeTemplateObject(cooked, raw) {
+  if (Object.defineProperty) { Object.defineProperty(cooked, "raw", { value: raw }); } else { cooked.raw = raw; }
+  return cooked;
+};
+
+var __setModuleDefault = Object.create ? (function(o, v) {
+  Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+  o["default"] = v;
+};
+
+function __importStar(mod) {
+  if (mod && mod.__esModule) return mod;
+  var result = {};
+  if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+  __setModuleDefault(result, mod);
+  return result;
+}
+
+function __importDefault(mod) {
+  return (mod && mod.__esModule) ? mod : { default: mod };
+}
+
+function __classPrivateFieldGet(receiver, state, kind, f) {
+  if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
+  if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
+  return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
+}
+
+function __classPrivateFieldSet(receiver, state, value, kind, f) {
+  if (kind === "m") throw new TypeError("Private method is not writable");
+  if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a setter");
+  if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
+  return (kind === "a" ? f.call(receiver, value) : f ? f.value = value : state.set(receiver, value)), value;
+}
+
+function __classPrivateFieldIn(state, receiver) {
+  if (receiver === null || (typeof receiver !== "object" && typeof receiver !== "function")) throw new TypeError("Cannot use 'in' operator on non-object");
+  return typeof state === "function" ? receiver === state : state.has(receiver);
+}
+
+function __addDisposableResource(env, value, async) {
+  if (value !== null && value !== void 0) {
+    if (typeof value !== "object" && typeof value !== "function") throw new TypeError("Object expected.");
+    var dispose, inner;
+    if (async) {
+      if (!Symbol.asyncDispose) throw new TypeError("Symbol.asyncDispose is not defined.");
+      dispose = value[Symbol.asyncDispose];
+    }
+    if (dispose === void 0) {
+      if (!Symbol.dispose) throw new TypeError("Symbol.dispose is not defined.");
+      dispose = value[Symbol.dispose];
+      if (async) inner = dispose;
+    }
+    if (typeof dispose !== "function") throw new TypeError("Object not disposable.");
+    if (inner) dispose = function() { try { inner.call(this); } catch (e) { return Promise.reject(e); } };
+    env.stack.push({ value: value, dispose: dispose, async: async });
+  }
+  else if (async) {
+    env.stack.push({ async: true });
+  }
+  return value;
+}
+
+var _SuppressedError = typeof SuppressedError === "function" ? SuppressedError : function (error, suppressed, message) {
+  var e = new Error(message);
+  return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
+};
+
+function __disposeResources(env) {
+  function fail(e) {
+    env.error = env.hasError ? new _SuppressedError(e, env.error, "An error was suppressed during disposal.") : e;
+    env.hasError = true;
+  }
+  function next() {
+    while (env.stack.length) {
+      var rec = env.stack.pop();
+      try {
+        var result = rec.dispose && rec.dispose.call(rec.value);
+        if (rec.async) return Promise.resolve(result).then(next, function(e) { fail(e); return next(); });
+      }
+      catch (e) {
+          fail(e);
+      }
+    }
+    if (env.hasError) throw env.error;
+  }
+  return next();
+}
+
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
+  __extends,
+  __assign,
+  __rest,
+  __decorate,
+  __param,
+  __metadata,
+  __awaiter,
+  __generator,
+  __createBinding,
+  __exportStar,
+  __values,
+  __read,
+  __spread,
+  __spreadArrays,
+  __spreadArray,
+  __await,
+  __asyncGenerator,
+  __asyncDelegator,
+  __asyncValues,
+  __makeTemplateObject,
+  __importStar,
+  __importDefault,
+  __classPrivateFieldGet,
+  __classPrivateFieldSet,
+  __classPrivateFieldIn,
+  __addDisposableResource,
+  __disposeResources,
+});
+
+
+/***/ })
+
+/******/ 	});
+/************************************************************************/
+/******/ 	// The module cache
+/******/ 	var __webpack_module_cache__ = {};
+/******/ 	
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/ 		// Check if module is in cache
+/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		if (cachedModule !== undefined) {
+/******/ 			return cachedModule.exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 			// no module.id needed
+/******/ 			// no module.loaded needed
+/******/ 			exports: {}
+/******/ 		};
+/******/ 	
+/******/ 		// Execute the module function
+/******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/ 	
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/ 	
+/************************************************************************/
+/******/ 	/* webpack/runtime/define property getters */
+/******/ 	(() => {
+/******/ 		// define getter functions for harmony exports
+/******/ 		__webpack_require__.d = (exports, definition) => {
+/******/ 			for(var key in definition) {
+/******/ 				if(__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) {
+/******/ 					Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 				}
+/******/ 			}
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/hasOwnProperty shorthand */
+/******/ 	(() => {
+/******/ 		__webpack_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/make namespace object */
+/******/ 	(() => {
+/******/ 		// define __esModule on exports
+/******/ 		__webpack_require__.r = (exports) => {
+/******/ 			if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+/******/ 				Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+/******/ 			}
+/******/ 			Object.defineProperty(exports, '__esModule', { value: true });
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/************************************************************************/
+/******/ 	
+/******/ 	// startup
+/******/ 	// Load entry module and return exports
+/******/ 	// This entry module is referenced by other modules so it can't be inlined
+/******/ 	var __webpack_exports__ = __webpack_require__(156);
+/******/ 	
 /******/ })()
 ;
