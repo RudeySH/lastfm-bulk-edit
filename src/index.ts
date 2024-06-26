@@ -1,8 +1,7 @@
 import he from 'he';
-import { Semaphore } from 'async-mutex';
 import { displayAlbumName } from './features/display-album-name';
 import { enhanceAutomaticEditsPage } from './features/enhance-automatic-edits-page';
-import { delay } from './utils/utils';
+import { fetchAndRetry } from './utils/utils';
 
 const namespace = 'lastfm-bulk-edit';
 
@@ -620,7 +619,7 @@ async function fetchScrobbleData(url: string, loadingModal: LoadingModal, parent
         if (!table) {
             // sometimes a missing chartlist is expected, other times it indicates a failure
             if (fetchedDocument.body.textContent!.includes('There was a problem loading your')) {
-                abort();
+                abort('There was a problem loading your scrobbles, please try again later.');
             }
             return [];
         }
@@ -667,77 +666,29 @@ function getUrlType(url: string) {
     }
 }
 
-const semaphore = new Semaphore(6);
-let delayPromise: Promise<void> | undefined = undefined;
-let delayTooManyRequestsMs = 10000;
-
 async function fetchHTMLDocument(url: string) {
-    return await semaphore.runExclusive(async () => {
-        let delayResolver!: () => void;
-        let delayRejecter!: (reason: unknown) => void;
+    try {
+        return await fetchAndRetry(url, undefined, async (response, i) => {
+            const html = await response.text();
+            const doc = domParser.parseFromString(html, 'text/html');
 
-        try {
-            for (let i = 0; true; i++) {
-                const response = await fetch(url);
-
-                if (response.ok) {
-                    const html = await response.text();
-                    const doc = domParser.parseFromString(html, 'text/html');
-
-                    if (doc.querySelector('table.chartlist:not(.chartlist__placeholder)') || i >= 5) {
-                        if (delayResolver !== undefined) {
-                            delayPromise = undefined;
-                            delayResolver();
-                        }
-
-                        return doc;
-                    }
-                }
-
-                if (delayPromise === undefined) {
-                    delayPromise = new Promise((resolve, reject) => {
-                        delayResolver = resolve;
-                        delayRejecter = reject;
-                    });
-
-                    if (response.status === 429) { // Too Many Requests
-                        await delay(delayTooManyRequestsMs);
-                    } else {
-                        await delay(1000);
-                    }
-                } else if (delayResolver !== undefined) {
-                    if (response.status === 429) { // Too Many Requests
-                        // retry after 10 seconds, then another 10 seconds, etc. up to 60 seconds, finally retry after every second.
-                        const additionalDelayMs = delayTooManyRequestsMs < 60000 ? 10000 : 1000;
-                        delayTooManyRequestsMs += additionalDelayMs;
-                        await delay(additionalDelayMs);
-                    } else if (i < 5) {
-                        // retry after 2 seconds, then 4 seconds, then 8, finally 16 (30 seconds total)
-                        await delay(Math.pow(2, i) * 1000);
-                    } else {
-                        abort();
-                        throw 'There was a problem loading your scrobbles, please try again later.';
-                    }
-                } else {
-                    await delayPromise;
-                }
+            if (doc.querySelector('table.chartlist:not(.chartlist__placeholder)') || i >= 5) {
+                return doc;
             }
-        } catch (reason) {
-            if (delayRejecter !== undefined) {
-                delayRejecter(reason);
-            }
-
-            throw reason;
-        }
-    });
+        });
+    } catch (error) {
+        const message = `There was a problem loading your scrobbles, please try again later. (${error})`;
+        abort(message);
+        throw message;
+    }
 }
 
 let aborting = false;
 
-function abort() {
+function abort(message: string) {
     if (aborting) return;
     aborting = true;
-    alert('There was a problem loading your scrobbles, please try again later.');
+    alert(message);
     window.location.reload();
 }
 
@@ -999,7 +950,7 @@ async function augmentEditScrobbleForm(urlType: string, scrobbleData: FormData[]
                 body.append(name, value as string);
             }
 
-            const response = await fetch(form.action, { method: 'POST', body: body });
+            const response = await fetchAndRetry(form.action, { method: 'POST', body: body });
             const html = await response.text();
 
             // use DOMParser to check the response for alerts

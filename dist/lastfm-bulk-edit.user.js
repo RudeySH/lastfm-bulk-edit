@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.5.0
+// @version 1.5.1
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -460,7 +460,7 @@ module.exports = asyncPool;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.displayAlbumName = void 0;
+exports.displayAlbumName = displayAlbumName;
 async function displayAlbumName(element) {
     var _a;
     const rows = element instanceof HTMLTableRowElement ? [element] : [...element.querySelectorAll('tr')];
@@ -528,7 +528,6 @@ async function displayAlbumName(element) {
         }
     }
 }
-exports.displayAlbumName = displayAlbumName;
 
 
 /***/ }),
@@ -542,8 +541,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.enhanceAutomaticEditsPage = void 0;
+exports.enhanceAutomaticEditsPage = enhanceAutomaticEditsPage;
 const tiny_async_pool_1 = __importDefault(__webpack_require__(692));
+const utils_1 = __webpack_require__(135);
 const viewAllButtonTemplate = document.createElement('template');
 viewAllButtonTemplate.innerHTML = `
     <button type="button" class="btn-primary" disabled>
@@ -637,7 +637,6 @@ async function enhanceAutomaticEditsPage(element) {
         }
     });
 }
-exports.enhanceAutomaticEditsPage = enhanceAutomaticEditsPage;
 function enhanceTable(table) {
     document.body.style.backgroundColor = '#fff';
     table.style.tableLayout = 'auto';
@@ -733,7 +732,7 @@ async function loadPages(table, currentPageNumber, pageCount) {
     return pages;
 }
 async function loadPage(pageNumber) {
-    const response = await fetch(`/settings/subscription/automatic-edits?page=${pageNumber}&_pjax=%23content`, {
+    const response = await (0, utils_1.fetchAndRetry)(`/settings/subscription/automatic-edits?page=${pageNumber}&_pjax=%23content`, {
         credentials: 'include',
         headers: {
             'X-Pjax': 'true',
@@ -768,7 +767,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const he_1 = __importDefault(__webpack_require__(488));
-const async_mutex_1 = __webpack_require__(693);
 const display_album_name_1 = __webpack_require__(308);
 const enhance_automatic_edits_page_1 = __webpack_require__(252);
 const utils_1 = __webpack_require__(135);
@@ -1289,7 +1287,7 @@ async function fetchScrobbleData(url, loadingModal, parentStep) {
         if (!table) {
             // sometimes a missing chartlist is expected, other times it indicates a failure
             if (fetchedDocument.body.textContent.includes('There was a problem loading your')) {
-                abort();
+                abort('There was a problem loading your scrobbles, please try again later.');
             }
             return [];
         }
@@ -1332,74 +1330,28 @@ function getUrlType(url) {
         return 'track';
     }
 }
-const semaphore = new async_mutex_1.Semaphore(6);
-let delayPromise = undefined;
-let delayTooManyRequestsMs = 10000;
 async function fetchHTMLDocument(url) {
-    return await semaphore.runExclusive(async () => {
-        let delayResolver;
-        let delayRejecter;
-        try {
-            for (let i = 0; true; i++) {
-                const response = await fetch(url);
-                if (response.ok) {
-                    const html = await response.text();
-                    const doc = domParser.parseFromString(html, 'text/html');
-                    if (doc.querySelector('table.chartlist:not(.chartlist__placeholder)') || i >= 5) {
-                        if (delayResolver !== undefined) {
-                            delayPromise = undefined;
-                            delayResolver();
-                        }
-                        return doc;
-                    }
-                }
-                if (delayPromise === undefined) {
-                    delayPromise = new Promise((resolve, reject) => {
-                        delayResolver = resolve;
-                        delayRejecter = reject;
-                    });
-                    if (response.status === 429) { // Too Many Requests
-                        await (0, utils_1.delay)(delayTooManyRequestsMs);
-                    }
-                    else {
-                        await (0, utils_1.delay)(1000);
-                    }
-                }
-                else if (delayResolver !== undefined) {
-                    if (response.status === 429) { // Too Many Requests
-                        // retry after 10 seconds, then another 10 seconds, etc. up to 60 seconds, finally retry after every second.
-                        const additionalDelayMs = delayTooManyRequestsMs < 60000 ? 10000 : 1000;
-                        delayTooManyRequestsMs += additionalDelayMs;
-                        await (0, utils_1.delay)(additionalDelayMs);
-                    }
-                    else if (i < 5) {
-                        // retry after 2 seconds, then 4 seconds, then 8, finally 16 (30 seconds total)
-                        await (0, utils_1.delay)(Math.pow(2, i) * 1000);
-                    }
-                    else {
-                        abort();
-                        throw 'There was a problem loading your scrobbles, please try again later.';
-                    }
-                }
-                else {
-                    await delayPromise;
-                }
+    try {
+        return await (0, utils_1.fetchAndRetry)(url, undefined, async (response, i) => {
+            const html = await response.text();
+            const doc = domParser.parseFromString(html, 'text/html');
+            if (doc.querySelector('table.chartlist:not(.chartlist__placeholder)') || i >= 5) {
+                return doc;
             }
-        }
-        catch (reason) {
-            if (delayRejecter !== undefined) {
-                delayRejecter(reason);
-            }
-            throw reason;
-        }
-    });
+        });
+    }
+    catch (error) {
+        const message = `There was a problem loading your scrobbles, please try again later. (${error})`;
+        abort(message);
+        throw message;
+    }
 }
 let aborting = false;
-function abort() {
+function abort(message) {
     if (aborting)
         return;
     aborting = true;
-    alert('There was a problem loading your scrobbles, please try again later.');
+    alert(message);
     window.location.reload();
 }
 // series for loop that updates the loading percentage
@@ -1611,7 +1563,7 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
             for (const [name, value] of formData) {
                 body.append(name, value);
             }
-            const response = await fetch(form.action, { method: 'POST', body: body });
+            const response = await (0, utils_1.fetchAndRetry)(form.action, { method: 'POST', body: body });
             const html = await response.text();
             // use DOMParser to check the response for alerts
             const placeholder = domParser.parseFromString(html, 'text/html');
@@ -1738,16 +1690,80 @@ function cloneFormData(formData) {
 /***/ }),
 
 /***/ 135:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.delay = void 0;
+exports.delay = delay;
+exports.fetchAndRetry = fetchAndRetry;
+const async_mutex_1 = __webpack_require__(693);
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
-exports.delay = delay;
+const semaphore = new async_mutex_1.Semaphore(6);
+let delayPromise = undefined;
+let delayTooManyRequestsMs = 10000;
+async function fetchAndRetry(url, init, callback) {
+    callback !== null && callback !== void 0 ? callback : (callback = async (response) => response);
+    return await semaphore.runExclusive(async () => {
+        var _a;
+        let delayResolver;
+        let delayRejecter;
+        try {
+            // eslint-disable-next-line no-constant-condition
+            for (let i = 0; true; i++) {
+                const response = await fetch(url, init);
+                if (response.ok) {
+                    const result = await callback(response, i);
+                    if (result !== undefined) {
+                        if (delayResolver !== undefined) {
+                            delayPromise = undefined;
+                            delayResolver();
+                        }
+                        return result;
+                    }
+                }
+                if (delayPromise === undefined) {
+                    delayPromise = new Promise((resolve, reject) => {
+                        delayResolver = resolve;
+                        delayRejecter = reject;
+                    });
+                    if (response.status === 429) { // Too Many Requests
+                        await delay(delayTooManyRequestsMs);
+                    }
+                    else {
+                        await delay(1000);
+                    }
+                }
+                else if (delayResolver !== undefined) {
+                    if (response.status === 429) { // Too Many Requests
+                        // retry after 10 seconds, then another 10 seconds, etc. up to 60 seconds, finally retry after every second.
+                        const additionalDelayMs = delayTooManyRequestsMs < 60000 ? 10000 : 1000;
+                        delayTooManyRequestsMs += additionalDelayMs;
+                        await delay(additionalDelayMs);
+                    }
+                    else if (i < 5) {
+                        // retry after 2 seconds, then 4 seconds, then 8, finally 16 (30 seconds total)
+                        await delay(Math.pow(2, i) * 1000);
+                    }
+                    else {
+                        throw (_a = response.statusText) !== null && _a !== void 0 ? _a : response.status.toString();
+                    }
+                }
+                else {
+                    await delayPromise;
+                }
+            }
+        }
+        catch (reason) {
+            if (delayRejecter !== undefined) {
+                delayRejecter(reason);
+            }
+            throw reason;
+        }
+    });
+}
 
 
 /***/ }),

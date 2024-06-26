@@ -1,4 +1,5 @@
 import asyncPool from 'tiny-async-pool';
+import { fetchAndRetry } from '../utils/utils';
 
 const viewAllButtonTemplate = document.createElement('template');
 viewAllButtonTemplate.innerHTML = `
@@ -251,7 +252,7 @@ async function loadPages(table: HTMLTableElement, currentPageNumber: number, pag
 }
 
 async function loadPage(pageNumber: number) {
-    const response = await fetch(`/settings/subscription/automatic-edits?page=${pageNumber}&_pjax=%23content`, {
+    const response = await fetchAndRetry(`/settings/subscription/automatic-edits?page=${pageNumber}&_pjax=%23content`, {
         credentials: 'include',
         headers: {
             'X-Pjax': 'true',
