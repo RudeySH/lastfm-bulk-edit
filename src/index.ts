@@ -1044,6 +1044,7 @@ function augmentInput(scrobbleData: FormData[], popup: Element, inputs: Scrobble
         inputs.album_name.addEventListener('input', () => {
             if (input.value === '' && inputs.album_name.value !== '') {
                 input.value = inputs.artist_name.value;
+                input.placeholder = '';
             }
             refreshFormGroupState();
         });

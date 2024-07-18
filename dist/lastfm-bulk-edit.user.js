@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.5.1
+// @version 1.5.2
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -1642,6 +1642,7 @@ function augmentInput(scrobbleData, popup, inputs, input, plural) {
         inputs.album_name.addEventListener('input', () => {
             if (input.value === '' && inputs.album_name.value !== '') {
                 input.value = inputs.artist_name.value;
+                input.placeholder = '';
             }
             refreshFormGroupState();
         });
