@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.5.2
+// @version 1.5.3
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -1650,10 +1650,11 @@ function augmentInput(scrobbleData, popup, inputs, input, plural) {
     function refreshFormGroupState() {
         formGroup.classList.remove('has-error');
         formGroup.classList.remove('has-success');
-        if (input.value === '' && (input.name === 'track_name'
-            || input.name === 'artist_name'
-            || input.name === 'album_name' && (inputs.album_artist_name.value !== '' || inputs.album_artist_name.placeholder === 'Mixed')
-            || input.name === 'album_artist_name' && (inputs.album_name.value !== '' || inputs.album_name.placeholder === 'Mixed'))) {
+        if (input.value === '' && input.placeholder === ''
+            && (input.name === 'track_name'
+                || input.name === 'artist_name'
+                || input.name === 'album_name' && (inputs.album_artist_name.value !== '' || inputs.album_artist_name.placeholder === 'Mixed')
+                || input.name === 'album_artist_name' && (inputs.album_name.value !== '' || inputs.album_name.placeholder === 'Mixed'))) {
             formGroup.classList.add('has-error');
         }
         else if (input.value !== defaultValue || groups.length >= 2 && input.placeholder === '') {

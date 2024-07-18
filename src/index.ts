@@ -1054,12 +1054,12 @@ function augmentInput(scrobbleData: FormData[], popup: Element, inputs: Scrobble
         formGroup.classList.remove('has-error');
         formGroup.classList.remove('has-success');
 
-        if (input.value === '' && (
-            input.name === 'track_name'
-            || input.name === 'artist_name'
-            || input.name === 'album_name' && (inputs.album_artist_name.value !== '' || inputs.album_artist_name.placeholder === 'Mixed')
-            || input.name === 'album_artist_name' && (inputs.album_name.value !== '' || inputs.album_name.placeholder === 'Mixed')
-        )) {
+        if (input.value === '' && input.placeholder === ''
+            && (input.name === 'track_name'
+                || input.name === 'artist_name'
+                || input.name === 'album_name' && (inputs.album_artist_name.value !== '' || inputs.album_artist_name.placeholder === 'Mixed')
+                || input.name === 'album_artist_name' && (inputs.album_name.value !== '' || inputs.album_name.placeholder === 'Mixed'))
+        ) {
             formGroup.classList.add('has-error');
         } else if (input.value !== defaultValue || groups.length >= 2 && input.placeholder === '') {
             formGroup.classList.add('has-success');
