@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.5.3
+// @version 1.5.4
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -553,7 +553,7 @@ const domParser = new DOMParser();
 let loadPagesPromise = undefined;
 let loadPagesProgressElement = undefined;
 async function enhanceAutomaticEditsPage(element) {
-    if (!document.URL.startsWith('https://www.last.fm/settings/subscription/automatic-edits')) {
+    if (!document.URL.includes('/settings/subscription/automatic-edits')) {
         return;
     }
     const section = element.querySelector('#subscription-corrections');
@@ -602,7 +602,7 @@ async function enhanceAutomaticEditsPage(element) {
     artistSelect.addEventListener('change', () => {
         const pageNumber = parseInt(artistSelect.value);
         const anchor = document.createElement('a');
-        anchor.href = '/settings/subscription/automatic-edits?page=' + pageNumber;
+        anchor.href = '?page=' + pageNumber;
         document.body.appendChild(anchor);
         anchor.click();
         document.body.removeChild(anchor);
@@ -732,7 +732,7 @@ async function loadPages(table, currentPageNumber, pageCount) {
     return pages;
 }
 async function loadPage(pageNumber) {
-    const response = await (0, utils_1.fetchAndRetry)(`/settings/subscription/automatic-edits?page=${pageNumber}&_pjax=%23content`, {
+    const response = await (0, utils_1.fetchAndRetry)(`?page=${pageNumber}&_pjax=%23content`, {
         credentials: 'include',
         headers: {
             'X-Pjax': 'true',

@@ -17,7 +17,7 @@ interface Page {
 }
 
 export async function enhanceAutomaticEditsPage(element: Element) {
-    if (!document.URL.startsWith('https://www.last.fm/settings/subscription/automatic-edits')) {
+    if (!document.URL.includes('/settings/subscription/automatic-edits')) {
         return;
     }
 
@@ -85,7 +85,7 @@ export async function enhanceAutomaticEditsPage(element: Element) {
         const pageNumber = parseInt(artistSelect.value);
 
             const anchor = document.createElement('a');
-            anchor.href = '/settings/subscription/automatic-edits?page=' + pageNumber;
+            anchor.href = '?page=' + pageNumber;
             document.body.appendChild(anchor);
             anchor.click();
             document.body.removeChild(anchor);
@@ -252,7 +252,7 @@ async function loadPages(table: HTMLTableElement, currentPageNumber: number, pag
 }
 
 async function loadPage(pageNumber: number) {
-    const response = await fetchAndRetry(`/settings/subscription/automatic-edits?page=${pageNumber}&_pjax=%23content`, {
+    const response = await fetchAndRetry(`?page=${pageNumber}&_pjax=%23content`, {
         credentials: 'include',
         headers: {
             'X-Pjax': 'true',
