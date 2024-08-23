@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.5.5
+// @version 1.5.6
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -454,6 +454,18 @@ module.exports = asyncPool;
 
 /***/ }),
 
+/***/ 921:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.namespace = void 0;
+exports.namespace = 'lastfm-bulk-edit';
+
+
+/***/ }),
+
 /***/ 308:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -462,9 +474,12 @@ module.exports = asyncPool;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.displayAlbumName = displayAlbumName;
 async function displayAlbumName(element) {
-    var _a;
+    var _a, _b;
     const rows = element instanceof HTMLTableRowElement ? [element] : [...element.querySelectorAll('tr')];
-    const baseHref = document.querySelector('.secondary-nav-item--overview a').getAttribute('href');
+    if (rows.length === 0) {
+        return;
+    }
+    const baseHref = (_a = document.querySelector('.secondary-nav-item--overview a')) === null || _a === void 0 ? void 0 : _a.getAttribute('href');
     for (const row of rows) {
         if (row.getAttribute('data-edit-scrobble-id') === null || row.querySelector('.chartlist-album') !== null) {
             continue;
@@ -475,7 +490,7 @@ async function displayAlbumName(element) {
         let albumName;
         if (form !== null) {
             const formData = new FormData(form);
-            albumName = (_a = formData.get('album_name')) === null || _a === void 0 ? void 0 : _a.toString();
+            albumName = (_b = formData.get('album_name')) === null || _b === void 0 ? void 0 : _b.toString();
         }
         else {
             albumName = coverArtAnchor.querySelector('img').alt;
@@ -543,13 +558,19 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.enhanceAutomaticEditsPage = enhanceAutomaticEditsPage;
 const tiny_async_pool_1 = __importDefault(__webpack_require__(692));
+const constants_1 = __webpack_require__(921);
 const utils_1 = __webpack_require__(135);
-const viewAllButtonTemplate = document.createElement('template');
-viewAllButtonTemplate.innerHTML = `
-    <button type="button" class="btn-primary" disabled>
-        View All At Once
-    </button>`;
+const toolbarTemplate = document.createElement('template');
+toolbarTemplate.innerHTML = `
+    <div>
+        <button type="button" class="btn-primary" disabled>
+            View All At Once
+        </button>
+        Go to artist: <select></select>
+    </div>`;
 const domParser = new DOMParser();
+const artistMap = new Map();
+let artistSelect = undefined;
 let loadPagesPromise = undefined;
 let loadPagesProgressElement = undefined;
 async function enhanceAutomaticEditsPage(element) {
@@ -561,10 +582,8 @@ async function enhanceAutomaticEditsPage(element) {
     if (!section || !table) {
         return;
     }
-    const viewAllButton = viewAllButtonTemplate.content.firstElementChild.cloneNode(true);
-    section.insertBefore(viewAllButton, section.firstElementChild);
     enhanceTable(table);
-    const paginationList = section === null || section === void 0 ? void 0 : section.querySelector('.pagination-list');
+    const paginationList = section.querySelector('.pagination-list');
     if (!paginationList) {
         return;
     }
@@ -574,41 +593,36 @@ async function enhanceAutomaticEditsPage(element) {
     if (pageCount === 1) {
         return;
     }
-    loadPagesProgressElement = document.createElement('span');
-    viewAllButton.insertAdjacentElement('afterend', loadPagesProgressElement);
-    viewAllButton.insertAdjacentText('afterend', ' ');
-    loadPagesPromise !== null && loadPagesPromise !== void 0 ? loadPagesPromise : (loadPagesPromise = loadPages(table, currentPageNumber, pageCount));
-    const pages = await loadPagesPromise;
-    section.removeChild(loadPagesProgressElement);
-    const artistMap = new Map();
-    for (const page of pages) {
-        for (const row of page.rows) {
-            const formData = getFormData(row);
-            const artistName = formData.get('artist_name_original').toString();
-            const key = artistName.toLowerCase();
-            if (!artistMap.has(key)) {
-                artistMap.set(key, { artistName, pageNumber: page.pageNumber });
-            }
+    const toolbar = toolbarTemplate.content.firstElementChild.cloneNode(true);
+    section.insertBefore(toolbar, section.firstElementChild);
+    artistSelect = toolbar.querySelector('select');
+    const selectedArtistKey = getSelectedArtistKey();
+    for (const artist of [...artistMap.values()].sort((a, b) => a.sortName.localeCompare(b.sortName))) {
+        const option = document.createElement('option');
+        option.value = artist.key;
+        option.selected = artist.key === selectedArtistKey;
+        option.text = artist.name;
+        const keepNothingSelected = !option.selected && artistSelect.selectedIndex === -1;
+        artistSelect.appendChild(option);
+        if (keepNothingSelected) {
+            artistSelect.selectedIndex = -1;
         }
     }
-    const artistSelect = document.createElement('select');
-    for (const value of artistMap.values()) {
-        const option = document.createElement('option');
-        option.text = value.artistName;
-        option.value = value.pageNumber.toString();
-        artistSelect.appendChild(option);
-    }
-    artistSelect.selectedIndex = -1;
-    artistSelect.addEventListener('change', () => {
-        const pageNumber = parseInt(artistSelect.value);
+    artistSelect.addEventListener('change', function () {
+        const selectedArtist = artistMap.get(this.value);
         const anchor = document.createElement('a');
-        anchor.href = '?page=' + pageNumber;
+        anchor.href = `?page=${selectedArtist.pageNumber}&artist=${(0, utils_1.encodeURIComponent2)(selectedArtist.name)}`;
         document.body.appendChild(anchor);
         anchor.click();
         document.body.removeChild(anchor);
     });
-    viewAllButton.insertAdjacentElement('afterend', artistSelect);
-    viewAllButton.insertAdjacentText('afterend', ' Go to artist: ');
+    loadPagesProgressElement = document.createElement('span');
+    toolbar.insertAdjacentText('beforeend', ' ');
+    toolbar.insertAdjacentElement('beforeend', loadPagesProgressElement);
+    loadPagesPromise !== null && loadPagesPromise !== void 0 ? loadPagesPromise : (loadPagesPromise = loadPages(table, currentPageNumber, pageCount));
+    const pages = await loadPagesPromise;
+    toolbar.removeChild(loadPagesProgressElement);
+    const viewAllButton = toolbar.querySelector('button');
     viewAllButton.disabled = false;
     viewAllButton.addEventListener('click', async () => {
         if (pages.length >= 100 && !window.confirm(`You are about to view ${pages.length} pages at once. This might take a long time to load. Are you sure?`)) {
@@ -632,7 +646,7 @@ async function enhanceAutomaticEditsPage(element) {
                 }
             }
             if (page.pageNumber % 10 === 0) {
-                await delay(1);
+                await (0, utils_1.delay)(1);
             }
         }
     });
@@ -684,6 +698,10 @@ function enhanceRow(row) {
     const artistName = formData.get('artist_name').toString();
     const albumName = formData.get('album_name').toString();
     const albumArtistName = formData.get('album_artist_name').toString();
+    const originalTrackName = formData.get('track_name_original').toString();
+    const originalArtistName = formData.get('artist_name_original').toString();
+    const originalAlbumName = formData.get('album_name_original').toString();
+    const originalAlbumArtistName = formData.get('album_artist_name_original').toString();
     function emphasize(cell, content) {
         var _a;
         cell.style.lineHeight = '1';
@@ -700,33 +718,43 @@ function enhanceRow(row) {
                 Originally "${(_a = cell.textContent) === null || _a === void 0 ? void 0 : _a.trim()}"
             </small>`;
     }
-    if (trackName !== formData.get('track_name_original')) {
+    if (trackName !== originalTrackName) {
         emphasize(row.cells[0], trackName);
     }
     else {
         // remove bold
         row.cells[0].innerHTML = row.cells[0].textContent;
     }
-    if (artistName !== formData.get('artist_name_original')) {
+    if (artistName !== originalArtistName) {
         emphasize(row.cells[1], artistName);
     }
-    if (albumName !== formData.get('album_name_original')) {
+    if (albumName !== originalAlbumName) {
         emphasize(row.cells[2], albumName);
     }
-    if (albumArtistName !== formData.get('album_artist_name_original')) {
+    if (albumArtistName !== originalAlbumArtistName) {
         emphasize(row.cells[3], albumArtistName);
+    }
+    if (originalArtistName.toLowerCase() === getSelectedArtistKey()) {
+        row.classList.add(`${constants_1.namespace}-highlight`);
     }
 }
 function getFormData(row) {
     return new FormData(row.querySelector('form'));
 }
+function getSelectedArtistKey() {
+    var _a;
+    return (_a = new URLSearchParams(location.search).get('artist')) === null || _a === void 0 ? void 0 : _a.toLowerCase();
+}
 async function loadPages(table, currentPageNumber, pageCount) {
-    const pages = [{ pageNumber: currentPageNumber, rows: [...table.tBodies[0].rows] }];
+    const currentPage = { pageNumber: currentPageNumber, rows: [...table.tBodies[0].rows] };
+    const pages = [currentPage];
     const pageNumbersToLoad = [...Array(pageCount).keys()].map(i => i + 1).filter(i => i !== currentPageNumber);
-    updateProgress(1, pageCount);
+    addArtistsToSelect(currentPage);
+    updateProgressText(1, pageCount);
     for await (const page of (0, tiny_async_pool_1.default)(6, pageNumbersToLoad, loadPage)) {
         pages.push(page);
-        updateProgress(pages.length, pageCount);
+        addArtistsToSelect(page);
+        updateProgressText(pages.length, pageCount);
     }
     pages.sort((a, b) => a.pageNumber < b.pageNumber ? -1 : 1);
     return pages;
@@ -747,11 +775,34 @@ async function loadPage(pageNumber) {
         rows: [...table.tBodies[0].rows],
     };
 }
-function updateProgress(current, total) {
-    loadPagesProgressElement.textContent = `${current} / ${total} (${(current * 100 / total).toFixed(0)}%)`;
+function addArtistsToSelect(page) {
+    const selectedArtistKey = getSelectedArtistKey();
+    for (const row of page.rows) {
+        const formData = getFormData(row);
+        const name = formData.get('artist_name_original').toString();
+        const sortName = name.replace(/\s+/g, '');
+        const key = name.toLowerCase();
+        const artist = artistMap.get(key);
+        if (!artist) {
+            artistMap.set(key, { key, name, sortName, pageNumber: page.pageNumber });
+            const option = document.createElement('option');
+            option.value = key;
+            option.selected = key === selectedArtistKey;
+            option.text = name;
+            const keepNothingSelected = !option.selected && artistSelect.selectedIndex === -1;
+            const insertAtIndex = [...artistMap.values()].sort((a, b) => a.sortName.localeCompare(b.sortName)).findIndex(x => x.key === key);
+            artistSelect.insertBefore(option, artistSelect.children[insertAtIndex]);
+            if (keepNothingSelected) {
+                artistSelect.selectedIndex = -1;
+            }
+        }
+        else if (artist.pageNumber > page.pageNumber) {
+            artist.pageNumber = page.pageNumber;
+        }
+    }
 }
-function delay(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+function updateProgressText(current, total) {
+    loadPagesProgressElement.textContent = `${current} / ${total} (${(current * 100 / total).toFixed(0)}%)`;
 }
 
 
@@ -770,7 +821,7 @@ const he_1 = __importDefault(__webpack_require__(488));
 const display_album_name_1 = __webpack_require__(308);
 const enhance_automatic_edits_page_1 = __webpack_require__(252);
 const utils_1 = __webpack_require__(135);
-const namespace = 'lastfm-bulk-edit';
+const constants_1 = __webpack_require__(921);
 // use the top-right link to determine the current user
 const authLink = document.querySelector('a.auth-link');
 // https://regex101.com/r/UCmC8f/1
@@ -837,18 +888,18 @@ function initialize() {
 function appendStyle() {
     const style = document.createElement('style');
     style.innerHTML = `
-        .${namespace}-abbr {
+        .${constants_1.namespace}-abbr {
             cursor: help;
         }
 
         @media (pointer: coarse), (hover: none) {
-            .${namespace}-abbr[title]:focus {
+            .${constants_1.namespace}-abbr[title]:focus {
                 position: relative;
                 display: inline-flex;
                 justify-content: center;
             }
 
-            .${namespace}-abbr[title]:focus::after {
+            .${constants_1.namespace}-abbr[title]:focus::after {
                 content: attr(title);
                 position: absolute;
                 top: 100%;
@@ -865,22 +916,22 @@ function appendStyle() {
             }
         }
 
-        .${namespace}-ellipsis {
+        .${constants_1.namespace}-ellipsis {
             display: block;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
 
-        .${namespace}-form-group-controls {
+        .${constants_1.namespace}-form-group-controls {
             margin-left: 0 !important;
         }
 
-        .${namespace}-list {
+        .${constants_1.namespace}-list {
             column-count: 2;
         }
 
-        .${namespace}-loading {
+        .${constants_1.namespace}-loading {
             background: url("/static/images/loading_dark_light_64.gif") 50% 50% no-repeat;
             height: 64px;
             display: flex;
@@ -888,21 +939,21 @@ function appendStyle() {
             align-items: center;
         }
 
-        .${namespace}-text-danger {
+        .${constants_1.namespace}-text-danger {
             color: #d92323;
         }
 
-        .${namespace}-text-info {
+        .${constants_1.namespace}-text-info {
             color: #2b65d9;
         }
 
         @media (min-width: 768px) {
-            .${namespace}-chartlist-scrobbles .chartlist-name {
+            .${constants_1.namespace}-chartlist-scrobbles .chartlist-name {
                 margin-top: -2px;
                 margin-bottom: 13px;
             }
 
-            .${namespace}-chartlist-scrobbles .chartlist-album {
+            .${constants_1.namespace}-chartlist-scrobbles .chartlist-album {
                 margin-top: 13px;
                 margin-bottom: -2px;
                 position: absolute;
@@ -910,15 +961,23 @@ function appendStyle() {
                 width: 182.41px;
             }
 
-            .${namespace}-chartlist-scrobbles .chartlist-album::before {
+            .${constants_1.namespace}-chartlist-scrobbles .chartlist-album::before {
                 width: 0 !important;
             }
         }
 
         @media (min-width: 1260px) {
-            .${namespace}-chartlist-scrobbles .chartlist-album {
+            .${constants_1.namespace}-chartlist-scrobbles .chartlist-album {
                 width: 272.41px;
             }
+        }
+
+        .${constants_1.namespace}-highlight {
+            background-color: #fff9e5;
+        }
+
+        .${constants_1.namespace}-highlight:hover {
+            background-color: #fcf2cf !important;
         }`;
     document.head.appendChild(style);
 }
@@ -1057,12 +1116,12 @@ function getEditScrobbleForm(url, row) {
                     </div>
                 </div>
                 <div class="form-group">
-                    <div class="form-group-controls ${namespace}-form-group-controls">
-                        <button type="button" class="btn-secondary" id="${namespace}-select-all">Select all</button>
-                        <button type="button" class="btn-secondary" id="${namespace}-deselect-all">Deselect all</button>
+                    <div class="form-group-controls ${constants_1.namespace}-form-group-controls">
+                        <button type="button" class="btn-secondary" id="${constants_1.namespace}-select-all">Select all</button>
+                        <button type="button" class="btn-secondary" id="${constants_1.namespace}-deselect-all">Deselect all</button>
                     </div>
                 </div>
-                <ul class="${namespace}-list">
+                <ul class="${constants_1.namespace}-list">
                     ${scrobbleDataGroups.map(([key, scrobbleData]) => {
                 var _a;
                 const firstScrobbleData = scrobbleData[0];
@@ -1073,10 +1132,10 @@ function getEditScrobbleForm(url, row) {
                         <div class="checkbox">
                             <label>
                                 <input type="checkbox" name="key" value="${he_1.default.escape(key)}" ${currentAlbumKey === undefined || currentAlbumKey === key ? 'checked' : ''} />
-                                <strong title="${he_1.default.escape(album_name !== null && album_name !== void 0 ? album_name : '')}" class="${namespace}-ellipsis ${currentAlbumKey === key ? `${namespace}-text-info` : !album_name ? `${namespace}-text-danger` : ''}">
+                                <strong title="${he_1.default.escape(album_name !== null && album_name !== void 0 ? album_name : '')}" class="${constants_1.namespace}-ellipsis ${currentAlbumKey === key ? `${constants_1.namespace}-text-info` : !album_name ? `${constants_1.namespace}-text-danger` : ''}">
                                     ${album_name ? he_1.default.escape(album_name) : '<em>No Album</em>'}
                                 </strong>
-                                <div title="${he_1.default.escape(artist_name)}" class="${namespace}-ellipsis">
+                                <div title="${he_1.default.escape(artist_name)}" class="${constants_1.namespace}-ellipsis">
                                     ${he_1.default.escape(artist_name)}
                                 </div>
                                 <small>
@@ -1088,12 +1147,12 @@ function getEditScrobbleForm(url, row) {
             }).join('')}
                 </ul>`;
             const checkboxes = body.querySelectorAll('input[type="checkbox"]');
-            body.querySelector(`#${namespace}-select-all`).addEventListener('click', () => {
+            body.querySelector(`#${constants_1.namespace}-select-all`).addEventListener('click', () => {
                 for (const checkbox of checkboxes) {
                     checkbox.checked = true;
                 }
             });
-            body.querySelector(`#${namespace}-deselect-all`).addEventListener('click', () => {
+            body.querySelector(`#${constants_1.namespace}-deselect-all`).addEventListener('click', () => {
                 for (const checkbox of checkboxes) {
                     checkbox.checked = false;
                 }
@@ -1230,14 +1289,14 @@ class Modal {
 class LoadingModal extends Modal {
     constructor(title, options) {
         const body = `
-            <div class="${namespace}-loading">
-                <div class="${namespace}-progress"></div>
+            <div class="${constants_1.namespace}-loading">
+                <div class="${constants_1.namespace}-progress"></div>
             </div>`;
         super(title, body, options);
         this.completed = false;
         this.steps = [];
         this.weight = 0;
-        this.progress = this.element.querySelector(`.${namespace}-progress`);
+        this.progress = this.element.querySelector(`.${constants_1.namespace}-progress`);
     }
     refreshProgress() {
         switch (this.options && this.options.display) {
@@ -1461,7 +1520,7 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
                         <input id="id_edit_all" type="checkbox" checked disabled>
                         <input name="edit_all" type="hidden" value="true">
                         Edit all
-                        <span class="abbr ${namespace}-abbr" tabindex="-1" title="You have scrobbled any combination of ${summary} ${scrobbleData.length} times">
+                        <span class="abbr ${constants_1.namespace}-abbr" tabindex="-1" title="You have scrobbled any combination of ${summary} ${scrobbleData.length} times">
                             ${scrobbleData.length} scrobbles
                         </span>
                         of this ${urlType}
@@ -1602,7 +1661,7 @@ function augmentInput(scrobbleData, popup, inputs, input, plural) {
         input.placeholder = 'Mixed';
         const tab = '\xa0'.repeat(8); // 8 non-breaking spaces
         const abbr = document.createElement('span');
-        abbr.className = `abbr ${namespace}-abbr`;
+        abbr.className = `abbr ${constants_1.namespace}-abbr`;
         abbr.tabIndex = -1;
         abbr.textContent = `${groups.length} ${plural}`;
         abbr.title = groups.map(([key, values]) => `${values.length}x${tab}${key !== null && key !== void 0 ? key : ''}`).join('\n');
@@ -1610,7 +1669,7 @@ function augmentInput(scrobbleData, popup, inputs, input, plural) {
         input.dataset['confirm'] = `You are about to merge scrobbles for ${groups.length} ${plural}. This cannot be undone. Would you like to continue?`;
         // datalist: a native HTML5 autocomplete feature
         const datalist = document.createElement('datalist');
-        datalist.id = `${namespace}-${popup.id}-${input.name}-datalist`;
+        datalist.id = `${constants_1.namespace}-${popup.id}-${input.name}-datalist`;
         for (const [value] of groups) {
             const option = document.createElement('option');
             option.value = (_a = value) !== null && _a !== void 0 ? _a : '';
@@ -1698,10 +1757,14 @@ function cloneFormData(formData) {
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.delay = delay;
+exports.encodeURIComponent2 = encodeURIComponent2;
 exports.fetchAndRetry = fetchAndRetry;
 const async_mutex_1 = __webpack_require__(693);
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+function encodeURIComponent2(uriComponent) {
+    return encodeURIComponent(uriComponent).replace(/%20/g, '+');
 }
 const semaphore = new async_mutex_1.Semaphore(6);
 let delayPromise = undefined;

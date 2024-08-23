@@ -1,7 +1,11 @@
 export async function displayAlbumName(element: Element) {
     const rows = element instanceof HTMLTableRowElement ? [element] : [...element.querySelectorAll('tr')];
 
-    const baseHref = document.querySelector('.secondary-nav-item--overview a')!.getAttribute('href')!;
+    if (rows.length === 0) {
+        return;
+    }
+
+    const baseHref = document.querySelector('.secondary-nav-item--overview a')?.getAttribute('href');
 
     for (const row of rows) {
         if (row.getAttribute('data-edit-scrobble-id') === null || row.querySelector('.chartlist-album') !== null) {

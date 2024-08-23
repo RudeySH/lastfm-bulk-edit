@@ -4,6 +4,10 @@ export function delay(ms: number) {
 	return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+export function encodeURIComponent2(uriComponent: string) {
+    return encodeURIComponent(uriComponent).replace(/%20/g, '+');
+}
+
 const semaphore = new Semaphore(6);
 let delayPromise: Promise<void> | undefined = undefined;
 let delayTooManyRequestsMs = 10000;

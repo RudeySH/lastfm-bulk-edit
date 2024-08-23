@@ -1,15 +1,30 @@
 import asyncPool from 'tiny-async-pool';
-import { fetchAndRetry } from '../utils/utils';
+import { namespace } from '../constants';
+import { delay, encodeURIComponent2, fetchAndRetry } from '../utils/utils';
 
-const viewAllButtonTemplate = document.createElement('template');
-viewAllButtonTemplate.innerHTML = `
-    <button type="button" class="btn-primary" disabled>
-        View All At Once
-    </button>`;
+const toolbarTemplate = document.createElement('template');
+toolbarTemplate.innerHTML = `
+    <div>
+        <button type="button" class="btn-primary" disabled>
+            View All At Once
+        </button>
+        Go to artist: <select></select>
+    </div>`;
 
 const domParser = new DOMParser();
+
+const artistMap = new Map<string, Artist>();
+let artistSelect: HTMLSelectElement | undefined = undefined;
+
 let loadPagesPromise: Promise<Page[]> | undefined = undefined;
 let loadPagesProgressElement: HTMLElement | undefined = undefined;
+
+interface Artist {
+    key: string;
+    name: string;
+    sortName: string;
+    pageNumber: number,
+}
 
 interface Page {
     pageNumber: number;
@@ -28,12 +43,9 @@ export async function enhanceAutomaticEditsPage(element: Element) {
         return;
     }
 
-    const viewAllButton = viewAllButtonTemplate.content.firstElementChild!.cloneNode(true) as HTMLButtonElement;
-    section.insertBefore(viewAllButton, section.firstElementChild);
-
     enhanceTable(table);
 
-    const paginationList = section?.querySelector('.pagination-list');
+    const paginationList = section.querySelector('.pagination-list');
 
     if (!paginationList) {
         return;
@@ -47,53 +59,46 @@ export async function enhanceAutomaticEditsPage(element: Element) {
         return;
     }
 
+    const toolbar = toolbarTemplate.content.firstElementChild!.cloneNode(true) as HTMLDivElement;
+    section.insertBefore(toolbar, section.firstElementChild);
+
+    artistSelect = toolbar.querySelector('select')!;
+
+    const selectedArtistKey = getSelectedArtistKey();
+
+    for (const artist of [...artistMap.values()].sort((a, b) => a.sortName.localeCompare(b.sortName))) {
+        const option = document.createElement('option');
+        option.value = artist.key;
+        option.selected = artist.key === selectedArtistKey;
+        option.text = artist.name;
+
+        const keepNothingSelected = !option.selected && artistSelect!.selectedIndex === -1;
+        artistSelect.appendChild(option);
+
+        if (keepNothingSelected) {
+            artistSelect!.selectedIndex = -1;
+        }
+    }
+
+    artistSelect.addEventListener('change', function () {
+        const selectedArtist = artistMap.get(this.value)!;
+        const anchor = document.createElement('a');
+        anchor.href = `?page=${selectedArtist.pageNumber}&artist=${encodeURIComponent2(selectedArtist.name)}`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+    });
+
     loadPagesProgressElement = document.createElement('span');
-    viewAllButton.insertAdjacentElement('afterend', loadPagesProgressElement);
-    viewAllButton.insertAdjacentText('afterend', ' ');
+    toolbar.insertAdjacentText('beforeend', ' ');
+    toolbar.insertAdjacentElement('beforeend', loadPagesProgressElement);
 
     loadPagesPromise ??= loadPages(table, currentPageNumber, pageCount);
     const pages = await loadPagesPromise;
 
-    section.removeChild(loadPagesProgressElement);
+    toolbar.removeChild(loadPagesProgressElement);
 
-    const artistMap = new Map<string, { artistName: string, pageNumber: number }>();
-
-    for (const page of pages) {
-        for (const row of page.rows) {
-            const formData = getFormData(row);
-            const artistName = formData.get('artist_name_original')!.toString();
-            const key = artistName.toLowerCase();
-
-            if (!artistMap.has(key)) {
-                artistMap.set(key, { artistName, pageNumber: page.pageNumber });
-            }
-        }
-    }
-
-    const artistSelect = document.createElement('select');
-
-    for (const value of artistMap.values()) {
-        const option = document.createElement('option');
-        option.text = value.artistName;
-        option.value = value.pageNumber.toString();
-        artistSelect.appendChild(option);
-    }
-
-    artistSelect.selectedIndex = -1;
-
-    artistSelect.addEventListener('change', () => {
-        const pageNumber = parseInt(artistSelect.value);
-
-            const anchor = document.createElement('a');
-            anchor.href = '?page=' + pageNumber;
-            document.body.appendChild(anchor);
-            anchor.click();
-            document.body.removeChild(anchor);
-    });
-
-    viewAllButton.insertAdjacentElement('afterend', artistSelect);
-    viewAllButton.insertAdjacentText('afterend', ' Go to artist: ');
-
+    const viewAllButton = toolbar.querySelector('button')!;
     viewAllButton.disabled = false;
 
     viewAllButton.addEventListener('click', async () => {
@@ -194,6 +199,11 @@ function enhanceRow(row: HTMLTableRowElement) {
     const albumName = formData.get('album_name')!.toString();
     const albumArtistName = formData.get('album_artist_name')!.toString();
 
+    const originalTrackName = formData.get('track_name_original')!.toString();
+    const originalArtistName = formData.get('artist_name_original')!.toString();
+    const originalAlbumName = formData.get('album_name_original')!.toString();
+    const originalAlbumArtistName = formData.get('album_artist_name_original')!.toString();
+
     function emphasize(cell: HTMLTableCellElement, content: string) {
         cell.style.lineHeight = '1';
         cell.innerHTML = `
@@ -210,23 +220,27 @@ function enhanceRow(row: HTMLTableRowElement) {
             </small>`
     }
 
-    if (trackName !== formData.get('track_name_original')) {
+    if (trackName !== originalTrackName) {
         emphasize(row.cells[0], trackName);
     } else {
         // remove bold
         row.cells[0].innerHTML = row.cells[0].textContent!;
     }
 
-    if (artistName !== formData.get('artist_name_original')) {
+    if (artistName !== originalArtistName) {
         emphasize(row.cells[1], artistName);
     }
 
-    if (albumName !== formData.get('album_name_original')) {
+    if (albumName !== originalAlbumName) {
         emphasize(row.cells[2], albumName);
     }
 
-    if (albumArtistName !== formData.get('album_artist_name_original')) {
+    if (albumArtistName !== originalAlbumArtistName) {
         emphasize(row.cells[3], albumArtistName);
+    }
+
+    if (originalArtistName.toLowerCase() === getSelectedArtistKey()) {
+        row.classList.add(`${namespace}-highlight`);
     }
 }
 
@@ -234,16 +248,23 @@ function getFormData(row: HTMLTableRowElement) {
     return new FormData(row.querySelector('form')!);
 }
 
+function getSelectedArtistKey() {
+    return new URLSearchParams(location.search).get('artist')?.toLowerCase();
+}
+
 async function loadPages(table: HTMLTableElement, currentPageNumber: number, pageCount: number) {
-    const pages: Page[] = [{ pageNumber: currentPageNumber, rows: [...table.tBodies[0].rows] }];
+    const currentPage: Page = { pageNumber: currentPageNumber, rows: [...table.tBodies[0].rows] };
+    const pages = [currentPage];
     const pageNumbersToLoad = [...Array(pageCount).keys()].map(i => i + 1).filter(i => i !== currentPageNumber);
 
-    updateProgress(1, pageCount);
+    addArtistsToSelect(currentPage);
+    updateProgressText(1, pageCount);
 
     for await (const page of asyncPool(6, pageNumbersToLoad, loadPage)) {
         pages.push(page);
 
-        updateProgress(pages.length, pageCount);
+        addArtistsToSelect(page);
+        updateProgressText(pages.length, pageCount);
     }
 
     pages.sort((a, b) => a.pageNumber < b.pageNumber ? -1 : 1);
@@ -272,10 +293,38 @@ async function loadPage(pageNumber: number) {
     };
 }
 
-function updateProgress(current: number, total: number) {
-    loadPagesProgressElement!.textContent = `${current} / ${total} (${(current * 100 / total).toFixed(0)}%)`;
+function addArtistsToSelect(page: Page) {
+    const selectedArtistKey = getSelectedArtistKey();
+
+    for (const row of page.rows) {
+        const formData = getFormData(row);
+        const name = formData.get('artist_name_original')!.toString();
+        const sortName = name.replace(/\s+/g, '');
+
+        const key = name.toLowerCase();
+        const artist = artistMap.get(key)!;
+
+        if (!artist) {
+            artistMap.set(key, { key, name, sortName, pageNumber: page.pageNumber });
+
+            const option = document.createElement('option');
+            option.value = key;
+            option.selected = key === selectedArtistKey;
+            option.text = name;
+
+            const keepNothingSelected = !option.selected && artistSelect!.selectedIndex === -1;
+            const insertAtIndex = [...artistMap.values()].sort((a, b) => a.sortName.localeCompare(b.sortName)).findIndex(x => x.key === key);
+            artistSelect!.insertBefore(option, artistSelect!.children[insertAtIndex]);
+
+            if (keepNothingSelected) {
+                artistSelect!.selectedIndex = -1;
+            }
+        } else if (artist.pageNumber > page.pageNumber) {
+            artist.pageNumber = page.pageNumber;
+        }
+    }
 }
 
-function delay(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+function updateProgressText(current: number, total: number) {
+    loadPagesProgressElement!.textContent = `${current} / ${total} (${(current * 100 / total).toFixed(0)}%)`;
 }

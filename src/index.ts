@@ -2,8 +2,7 @@ import he from 'he';
 import { displayAlbumName } from './features/display-album-name';
 import { enhanceAutomaticEditsPage } from './features/enhance-automatic-edits-page';
 import { fetchAndRetry } from './utils/utils';
-
-const namespace = 'lastfm-bulk-edit';
+import { namespace } from './constants';
 
 // use the top-right link to determine the current user
 const authLink = document.querySelector<HTMLAnchorElement>('a.auth-link')!;
@@ -165,6 +164,14 @@ function appendStyle() {
             .${namespace}-chartlist-scrobbles .chartlist-album {
                 width: 272.41px;
             }
+        }
+
+        .${namespace}-highlight {
+            background-color: #fff9e5;
+        }
+
+        .${namespace}-highlight:hover {
+            background-color: #fcf2cf !important;
         }`;
 
     document.head.appendChild(style);
