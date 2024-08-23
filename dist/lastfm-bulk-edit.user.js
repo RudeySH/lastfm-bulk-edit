@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.5.4
+// @version 1.5.5
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -492,7 +492,7 @@ async function displayAlbumName(element) {
         // Create and insert td element.
         const albumCell = document.createElement('td');
         albumCell.className = 'chartlist-album';
-        if (albumName) {
+        if (albumHref && albumName) {
             const albumAnchor = document.createElement('a');
             albumAnchor.href = albumHref;
             albumAnchor.title = albumName;
@@ -508,7 +508,7 @@ async function displayAlbumName(element) {
         const nameCell = row.querySelector('.chartlist-name');
         row.insertBefore(albumCell, nameCell.nextElementSibling);
         // Add menu items.
-        if (albumName) {
+        if (albumHref && albumName) {
             const menu = row.querySelector('.chartlist-more-menu');
             const albumMenuItem1 = document.createElement('li');
             const menuItemAnchor1 = document.createElement('a');

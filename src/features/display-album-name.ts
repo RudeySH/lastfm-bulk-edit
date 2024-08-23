@@ -9,7 +9,7 @@ export async function displayAlbumName(element: Element) {
         }
 
         const coverArtAnchor = row.querySelector<HTMLAnchorElement>('.cover-art')!;
-        const albumHref = coverArtAnchor.getAttribute('href')!;
+        const albumHref = coverArtAnchor.getAttribute('href');
         const form = row.querySelector<HTMLFormElement>('form[data-edit-scrobble]:not([data-edit-scrobbles])');
         let albumName: string | undefined;
 
@@ -36,7 +36,7 @@ export async function displayAlbumName(element: Element) {
         const albumCell = document.createElement('td');
         albumCell.className = 'chartlist-album';
 
-        if (albumName) {
+        if (albumHref && albumName) {
             const albumAnchor = document.createElement('a');
             albumAnchor.href = albumHref;
             albumAnchor.title = albumName;
@@ -53,7 +53,7 @@ export async function displayAlbumName(element: Element) {
         row.insertBefore(albumCell, nameCell.nextElementSibling);
 
         // Add menu items.
-        if (albumName) {
+        if (albumHref && albumName) {
             const menu = row.querySelector('.chartlist-more-menu')!;
 
             const albumMenuItem1 = document.createElement('li');
