@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.5.6
+// @version 1.5.7
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -466,6 +466,56 @@ exports.namespace = 'lastfm-bulk-edit';
 
 /***/ }),
 
+/***/ 641:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.createTimestampLinks = createTimestampLinks;
+async function createTimestampLinks(element) {
+    var _a;
+    const libraryHref = (_a = document.querySelector('.secondary-nav-item--library a')) === null || _a === void 0 ? void 0 : _a.href;
+    if (!libraryHref) {
+        return;
+    }
+    const cells = element.querySelectorAll('.chartlist-timestamp');
+    for (const cell of cells) {
+        const span = cell.querySelector('span[title]');
+        if (span === null || span.parentNode !== cell) {
+            continue;
+        }
+        let date;
+        if (cell.classList.contains('chartlist-timestamp--lang-en')) {
+            date = new Date(Date.parse(span.title.split(',')[0]));
+        }
+        else {
+            // Languages other than English are not supported.
+            continue;
+        }
+        const dateString = getDateString(date);
+        const link = document.createElement('a');
+        link.href = `${libraryHref}?from=${dateString}&to=${dateString}`;
+        cell.insertBefore(link, span);
+        link.appendChild(span);
+    }
+}
+function getDateString(date) {
+    let s = date.getFullYear() + '-';
+    const month = date.getMonth() + 1;
+    if (month < 10)
+        s += '0';
+    s += month + '-';
+    const day = date.getDate();
+    if (day < 10)
+        s += '0';
+    s += day;
+    return s;
+}
+
+
+/***/ }),
+
 /***/ 308:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -818,6 +868,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const he_1 = __importDefault(__webpack_require__(488));
+const create_timestamp_links_1 = __webpack_require__(641);
 const display_album_name_1 = __webpack_require__(308);
 const enhance_automatic_edits_page_1 = __webpack_require__(252);
 const utils_1 = __webpack_require__(135);
@@ -862,6 +913,7 @@ if (authLink) {
 function initialize() {
     appendStyle();
     appendEditScrobbleHeaderLinkAndMenuItems(document.body);
+    (0, create_timestamp_links_1.createTimestampLinks)(document.body);
     (0, display_album_name_1.displayAlbumName)(document.body);
     (0, enhance_automatic_edits_page_1.enhanceAutomaticEditsPage)(document.body);
     // use MutationObserver because Last.fm is a single-page application
@@ -874,6 +926,7 @@ function initialize() {
                     }
                     node.setAttribute('data-processed', 'true');
                     appendEditScrobbleHeaderLinkAndMenuItems(node);
+                    (0, create_timestamp_links_1.createTimestampLinks)(document.body);
                     (0, display_album_name_1.displayAlbumName)(node);
                     (0, enhance_automatic_edits_page_1.enhanceAutomaticEditsPage)(node);
                 }

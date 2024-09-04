@@ -1,4 +1,5 @@
 import he from 'he';
+import { createTimestampLinks } from './features/create-timestamp-links';
 import { displayAlbumName } from './features/display-album-name';
 import { enhanceAutomaticEditsPage } from './features/enhance-automatic-edits-page';
 import { fetchAndRetry } from './utils/utils';
@@ -50,6 +51,7 @@ if (authLink) {
 function initialize() {
     appendStyle();
     appendEditScrobbleHeaderLinkAndMenuItems(document.body);
+    createTimestampLinks(document.body);
     displayAlbumName(document.body);
     enhanceAutomaticEditsPage(document.body);
 
@@ -65,6 +67,7 @@ function initialize() {
 
                     node.setAttribute('data-processed', 'true');
                     appendEditScrobbleHeaderLinkAndMenuItems(node);
+                    createTimestampLinks(document.body);
                     displayAlbumName(node);
                     enhanceAutomaticEditsPage(node);
                 }
