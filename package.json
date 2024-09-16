@@ -1,6 +1,6 @@
 {
   "name": "lastfm-bulk-edit",
-  "version": "1.5.7",
+  "version": "1.5.8",
   "description": "Bulk edit your scrobbles for any artist or album on Last.fm at once.",
   "main": "dist/lastfm-bulk-edit.js",
   "scripts": {

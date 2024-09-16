@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.5.7
+// @version 1.5.8
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -525,16 +525,27 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.displayAlbumName = displayAlbumName;
 async function displayAlbumName(element) {
     var _a, _b;
-    const rows = element instanceof HTMLTableRowElement ? [element] : [...element.querySelectorAll('tr')];
+    const rows = element instanceof HTMLTableRowElement ? [element] : element.querySelectorAll('tr');
     if (rows.length === 0) {
         return;
     }
     const baseHref = (_a = document.querySelector('.secondary-nav-item--overview a')) === null || _a === void 0 ? void 0 : _a.getAttribute('href');
     for (const row of rows) {
-        if (row.getAttribute('data-edit-scrobble-id') === null || row.querySelector('.chartlist-album') !== null) {
+        // Ignore non-chartlist rows.
+        if (!row.matches('.chartlist-row[data-edit-scrobble-id]')) {
             continue;
         }
+        // Ignore non-chartlist tables and tables with an index.
+        const table = row.closest('table');
+        if (table === null || !table.matches('.chartlist:not(.chartlist--with-index)')) {
+            continue;
+        }
+        // Ignore rows without a cover art image or cover art placeholder.
         const coverArtAnchor = row.querySelector('.cover-art');
+        if (coverArtAnchor === null) {
+            continue;
+        }
+        // Extract album link and name from cover art and scrobble edit form.
         const albumHref = coverArtAnchor.getAttribute('href');
         const form = row.querySelector('form[data-edit-scrobble]:not([data-edit-scrobbles])');
         let albumName;
@@ -546,7 +557,6 @@ async function displayAlbumName(element) {
             albumName = coverArtAnchor.querySelector('img').alt;
         }
         // Create and insert th element.
-        const table = row.closest('table');
         if (!table.classList.contains('lastfm-bulk-edit-chartlist-scrobbles')) {
             table.classList.add('lastfm-bulk-edit-chartlist-scrobbles');
             const albumHeaderCell = document.createElement('th');
@@ -1063,7 +1073,7 @@ function appendEditScrobbleHeaderLink(element) {
 }
 function appendEditScrobbleMenuItems(element) {
     var _a;
-    const rows = element instanceof HTMLTableRowElement ? [element] : [...element.querySelectorAll('tr')];
+    const rows = element instanceof HTMLTableRowElement ? [element] : element.querySelectorAll('tr');
     for (const row of rows) {
         const link = row.querySelector('a.chartlist-count-bar-link,a.more-item--track[href^="/user/"]');
         if (!link) {

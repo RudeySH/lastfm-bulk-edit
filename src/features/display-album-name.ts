@@ -1,5 +1,5 @@
 export async function displayAlbumName(element: Element) {
-    const rows = element instanceof HTMLTableRowElement ? [element] : [...element.querySelectorAll('tr')];
+    const rows = element instanceof HTMLTableRowElement ? [element] : element.querySelectorAll('tr');
 
     if (rows.length === 0) {
         return;
@@ -8,11 +8,24 @@ export async function displayAlbumName(element: Element) {
     const baseHref = document.querySelector('.secondary-nav-item--overview a')?.getAttribute('href');
 
     for (const row of rows) {
-        if (row.getAttribute('data-edit-scrobble-id') === null || row.querySelector('.chartlist-album') !== null) {
+        // Ignore non-chartlist rows.
+        if (!row.matches('.chartlist-row[data-edit-scrobble-id]')) {
             continue;
         }
 
-        const coverArtAnchor = row.querySelector<HTMLAnchorElement>('.cover-art')!;
+        // Ignore non-chartlist tables and tables with an index.
+        const table = row.closest('table');
+        if (table === null || !table.matches('.chartlist:not(.chartlist--with-index)')) {
+            continue;
+        }
+
+        // Ignore rows without a cover art image or cover art placeholder.
+        const coverArtAnchor = row.querySelector<HTMLAnchorElement | HTMLSpanElement>('.cover-art');
+        if (coverArtAnchor === null) {
+            continue;
+        }
+
+        // Extract album link and name from cover art and scrobble edit form.
         const albumHref = coverArtAnchor.getAttribute('href');
         const form = row.querySelector<HTMLFormElement>('form[data-edit-scrobble]:not([data-edit-scrobbles])');
         let albumName: string | undefined;
@@ -25,7 +38,6 @@ export async function displayAlbumName(element: Element) {
         }
 
         // Create and insert th element.
-        const table = row.closest('table')!
         if (!table.classList.contains('lastfm-bulk-edit-chartlist-scrobbles')) {
             table.classList.add('lastfm-bulk-edit-chartlist-scrobbles');
 

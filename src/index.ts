@@ -217,7 +217,7 @@ function appendEditScrobbleHeaderLink(element: Element) {
 }
 
 function appendEditScrobbleMenuItems(element: Element) {
-    const rows = element instanceof HTMLTableRowElement ? [element] : [...element.querySelectorAll('tr')];
+    const rows = element instanceof HTMLTableRowElement ? [element] : element.querySelectorAll('tr');
 
     for (const row of rows) {
         const link = row.querySelector<HTMLAnchorElement>('a.chartlist-count-bar-link,a.more-item--track[href^="/user/"]');
