@@ -209,7 +209,7 @@ function appendEditScrobbleHeaderLink(element: Element) {
     link.textContent = 'Edit scrobbles';
     link.addEventListener('click', () => button.click());
 
-    if (header.lastElementChild?.tagName === 'A') {
+    if (header.lastElementChild?.tagName !== 'H2') {
         header.insertAdjacentText('beforeend', ' · ');
     }
 
@@ -608,9 +608,20 @@ async function fetchScrobbleData(url: string, loadingModal: LoadingModal, parent
         url = url.substring(0, indexOfQuery);
     }
 
-    if (getUrlType(url) === 'artist' && !url.endsWith('/+tracks')) {
-        url += '/+tracks'; // skip artist overview and go straight to the tracks
+    switch (getUrlType(url)) {
+        case 'artist':
+            if (!url.endsWith('/+tracks')) {
+                url += '/+tracks'; // skip artist overview and go straight to the tracks
+            }
+            break;
+
+        case 'track':
+            if (!url.includes('/library/music/+noredirect/')) {
+                url = url.replace('/library/music/', '/library/music/+noredirect/'); // avoid redirects
+            }
+            break;
     }
+
 
     const documentsToFetch = [fetchHTMLDocument(url)];
     const firstDocument = await documentsToFetch[0];

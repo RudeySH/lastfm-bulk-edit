@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.5.8
+// @version 1.5.9
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -1066,7 +1066,7 @@ function appendEditScrobbleHeaderLink(element) {
     link.href = 'javascript:void(0)';
     link.textContent = 'Edit scrobbles';
     link.addEventListener('click', () => button.click());
-    if (((_a = header.lastElementChild) === null || _a === void 0 ? void 0 : _a.tagName) === 'A') {
+    if (((_a = header.lastElementChild) === null || _a === void 0 ? void 0 : _a.tagName) !== 'H2') {
         header.insertAdjacentText('beforeend', ' · ');
     }
     header.insertAdjacentElement('beforeend', form);
@@ -1392,8 +1392,17 @@ async function fetchScrobbleData(url, loadingModal, parentStep) {
     if (indexOfQuery !== -1) {
         url = url.substring(0, indexOfQuery);
     }
-    if (getUrlType(url) === 'artist' && !url.endsWith('/+tracks')) {
-        url += '/+tracks'; // skip artist overview and go straight to the tracks
+    switch (getUrlType(url)) {
+        case 'artist':
+            if (!url.endsWith('/+tracks')) {
+                url += '/+tracks'; // skip artist overview and go straight to the tracks
+            }
+            break;
+        case 'track':
+            if (!url.includes('/library/music/+noredirect/')) {
+                url = url.replace('/library/music/', '/library/music/+noredirect/'); // avoid redirects
+            }
+            break;
     }
     const documentsToFetch = [fetchHTMLDocument(url)];
     const firstDocument = await documentsToFetch[0];
