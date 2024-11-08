@@ -7,7 +7,7 @@ import { LoadingModal } from './modals/LoadingModal';
 import { LoadingModalOptions } from './modals/LoadingModalOptions';
 import { Modal } from './modals/Modal';
 import { Step } from './modals/Step';
-import { delay, fetchAndRetry } from './utils/utils';
+import { fetchAndRetry } from './utils/utils';
 
 // use the top-right link to determine the current user
 const authLink = document.querySelector<HTMLAnchorElement>('a.auth-link')!;
@@ -18,18 +18,17 @@ const artistRegExp = new RegExp(`^${authLink?.href}/library/music(/\\+[^/]*)*(/[
 
 const domParser = new DOMParser();
 
-const editScrobbleFormTemplate = document.createElement('template');
-editScrobbleFormTemplate.innerHTML = `
-    <form method="POST" action="${authLink?.getAttribute('href')}/library/edit?edited-variation=library-track-scrobble" data-edit-scrobble data-edit-scrobbles>
+const bulkEditScrobbleFormTemplate = document.createElement('template');
+bulkEditScrobbleFormTemplate.innerHTML = `
+    <form method="POST" action="${authLink?.getAttribute('href')}/library/edit?edited-variation=library-track-scrobble"
+          data-edit-scrobble data-bulk-edit-scrobbles>
         <input type="hidden" name="csrfmiddlewaretoken" value="">
         <input type="hidden" name="artist_name" value="">
         <input type="hidden" name="track_name" value="">
         <input type="hidden" name="album_name" value="">
         <input type="hidden" name="album_artist_name" value="">
         <input type="hidden" name="timestamp" value="">
-        <button type="submit" class="mimic-link dropdown-menu-clickable-item more-item--edit-old" data-analytics-action="EditScrobblesOpen">
-            Edit scrobbles
-        </button>
+        <button type="submit" style="display: none;"></button>
     </form>`;
 
 if (authLink) {
@@ -38,7 +37,7 @@ if (authLink) {
 
 function initialize() {
     appendStyle();
-    appendEditScrobbleHeaderLinkAndMenuItems(document.body);
+    appendBulkEditScrobblesHeaderLinkAndMenuItems(document.body);
     createTimestampLinks(document.body);
     displayAlbumName(document.body);
     enhanceAutomaticEditsPage(document.body);
@@ -54,7 +53,7 @@ function initialize() {
                     }
 
                     node.setAttribute('data-processed', 'true');
-                    appendEditScrobbleHeaderLinkAndMenuItems(node);
+                    appendBulkEditScrobblesHeaderLinkAndMenuItems(node);
                     createTimestampLinks(document.body);
                     displayAlbumName(node);
                     enhanceAutomaticEditsPage(node);
@@ -168,106 +167,92 @@ function appendStyle() {
     document.head.appendChild(style);
 }
 
-function appendEditScrobbleHeaderLinkAndMenuItems(element: Element) {
+function appendBulkEditScrobblesHeaderLinkAndMenuItems(element: Element) {
     if (!document.URL.startsWith(authLink.href)) {
         return; // current page is not the user's profile
     }
 
-    appendEditScrobbleHeaderLink(element);
-    appendEditScrobbleMenuItems(element);
+    appendBulkEditScrobblesHeaderLink(element);
+    appendBulkEditScrobblesMenuItems(element);
 }
 
-function appendEditScrobbleHeaderLink(element: Element) {
+function appendBulkEditScrobblesHeaderLink(element: Element) {
     const header = element.querySelector('.library-header');
 
     if (header === null) {
         return; // current page does not contain the header we're looking for
     }
 
-    const form = getEditScrobbleForm(document.URL);
-    const button = form.querySelector('button')!;
+    const { form, click } = getBulkEditScrobbleMenuItem(document.URL);
 
-    // replace submit button with a link
-
-    form.style.display = 'inline';
-    button.style.display = 'none';
-
-    const link = form.appendChild(document.createElement('a'));
+    const link = document.createElement('a');
     link.href = 'javascript:void(0)';
-    link.textContent = 'Edit scrobbles';
-    link.addEventListener('click', () => button.click());
+    link.textContent = 'Bulk edit scrobbles';
+    link.addEventListener('click', click);
 
     if (header.lastElementChild?.tagName !== 'H2') {
         header.insertAdjacentText('beforeend', ' · ');
     }
 
+    header.insertAdjacentElement('beforeend', link);
     header.insertAdjacentElement('beforeend', form);
 }
 
-function appendEditScrobbleMenuItems(element: Element) {
+function appendBulkEditScrobblesMenuItems(element: Element) {
     const rows = element instanceof HTMLTableRowElement ? [element] : element.querySelectorAll('tr');
 
     for (const row of rows) {
-        const link = row.querySelector<HTMLAnchorElement>('a.chartlist-count-bar-link,a.more-item--track[href^="/user/"]');
+        const link = row.querySelector<HTMLAnchorElement>('a.chartlist-count-bar-link,a.more-item--track[href*="/user/"]');
 
         if (!link) {
             continue; // this is not an artist, album or track
         }
 
-        const form = getEditScrobbleForm(link.href, row);
+        const { form, click } = getBulkEditScrobbleMenuItem(link.href, row);
 
-        const editScrobbleMenuItem = document.createElement('li');
-        editScrobbleMenuItem.appendChild(form);
-        editScrobbleMenuItem.setAttribute('data-processed', 'true');
+        const button = document.createElement('button');
+        button.className = 'mimic-link dropdown-menu-clickable-item more-item--edit-old';
+        button.textContent = 'Bulk edit scrobbles';
+        button.setAttribute('data-analytics-action', 'BulkEditScrobblesOpen');
+        button.addEventListener('click', click);
 
-        // append new menu item to the DOM
+        form.style.marginTop = '0';
+
+        const bulkEditScrobbleMenuItem = document.createElement('li');
+        bulkEditScrobbleMenuItem.appendChild(button);
+        bulkEditScrobbleMenuItem.appendChild(form);
+        bulkEditScrobbleMenuItem.setAttribute('data-processed', 'true');
+
+        // insert/replace "Bulk edit scrobbles" menu item so it comes after "Edit scrobble"
         const menu = row.querySelector('.chartlist-more-menu')!;
-        if (menu.firstElementChild?.hasAttribute('data-processed')) {
-            menu.removeChild(menu.firstElementChild);
+
+        let editScrobbleMenuItem: Element | undefined = undefined;
+        for (const menuItem of menu.children) {
+            if (menuItem.hasAttribute('data-processed')) {
+                menu.removeChild(menuItem);
+            } else if (menuItem.querySelector('button.more-item--edit-old') !== null) {
+                editScrobbleMenuItem = menuItem;
+            }
         }
-        menu.insertBefore(editScrobbleMenuItem, menu.firstElementChild);
+
+        if (editScrobbleMenuItem) {
+            menu.insertBefore(bulkEditScrobbleMenuItem, editScrobbleMenuItem.nextElementSibling);
+        } else {
+            menu.insertBefore(bulkEditScrobbleMenuItem, menu.firstElementChild);
+        }
     }
 }
 
-function getEditScrobbleForm(url: string, row?: HTMLTableRowElement) {
+function getBulkEditScrobbleMenuItem(url: string, row?: HTMLTableRowElement) {
     const urlType = getUrlType(url);
 
-    const form = editScrobbleFormTemplate.content.firstElementChild!.cloneNode(true) as HTMLFormElement;
-    const button = form.querySelector('button')!;
+    const form = bulkEditScrobbleFormTemplate.content.firstElementChild!.cloneNode(true) as HTMLFormElement;
+    const submitButton = form.querySelector<HTMLButtonElement>('button')!;
 
     let allScrobbleData: FormData[];
     let scrobbleData: FormData[];
-    let submit = false;
 
-    button.addEventListener('click', async (event: Event) => {
-        if (!document.querySelector('.header--user .label')) {
-            alert('Last.fm pro subscription is required to edit scrobbles.')
-        }
-
-        if (!submit) {
-            event.stopImmediatePropagation();
-            return;
-        }
-
-        const loadingModal = createLoadingModal('Waiting for Last.fm...', { dismissible: true });
-
-        try {
-            await augmentEditScrobbleForm(scrobbleData);
-        } finally {
-            loadingModal.hide();
-        }
-
-        submit = false;
-    });
-
-    form.addEventListener('submit', async (event: Event) => {
-        if (submit) {
-            return;
-        }
-
-        event.preventDefault();
-        event.stopImmediatePropagation();
-
+    const click = async () => {
         if (!allScrobbleData) {
             const loadingModal = createLoadingModal('Loading Scrobbles...', { dismissible: true, display: 'percentage' });
 
@@ -331,7 +316,7 @@ function getEditScrobbleForm(url: string, row?: HTMLTableRowElement) {
             body.innerHTML = `
                 <div class="form-disclaimer">
                     <div class="alert alert-info">
-                        Scrobbles from this ${urlType} are spread out across multiple albums.
+                        ${urlType === 'track' ? 'This track is' : `Tracks from this ${urlType} are`} scrobbled under multiple albums.
                         Select which albums you would like to edit.
                         Deselect albums you would like to skip.
                     </div>
@@ -404,11 +389,15 @@ function getEditScrobbleForm(url: string, row?: HTMLTableRowElement) {
 
         // use the first scrobble to trick Last.fm into fetching the Edit Scrobble modal
         applyFormData(form, scrobbleData[0]);
-        submit = true;
-        button.click();
+
+        submitButton.click();
+    };
+
+    submitButton.addEventListener('click', async () => {
+        await augmentEditScrobbleForm(scrobbleData);
     });
 
-    return form;
+    return { form, click };
 }
 
 // shows a form dialog and resolves its promise on submit
@@ -629,17 +618,20 @@ interface ScrobbleFormControlsCollection extends HTMLFormControlsCollection {
 
 // augments the default Edit Scrobble form to include new features
 async function augmentEditScrobbleForm(scrobbleData: FormData[]) {
-    const wrapper = await observeChildList(document.body, '.popup_wrapper');
+    const loadingModal = createLoadingModal('Waiting for Last.fm...', { dismissible: true });
+    let popup: Element;
 
-    // wait 1 frame
-    await delay(1);
+    try {
+        popup = await observeChildList(document.body, '.popup_content');
+    } finally {
+        loadingModal.hide();
+    }
 
-    const popup = wrapper.querySelector('.popup_content')!;
     const title = popup.querySelector<HTMLElement>('.modal-title')!;
     const form = popup.querySelector<HTMLFormElement>('form[action$="/library/edit?edited-variation=library-track-scrobble"]')!;
     const elements = form.elements as ScrobbleFormControlsCollection;
 
-    title.textContent = `Edit Scrobbles`;
+    title.textContent = `Bulk Edit Scrobbles`;
 
     // remove traces of the first scrobble that was used to initialize the form
     const topBox = form.querySelector('.edit-scrobble-top-box');
@@ -696,8 +688,9 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[]) {
         elements.edit_all.checked = true;
         elements.edit_all.disabled = true;
         elements.edit_all.parentElement!.style.cursor = 'auto';
-        elements.edit_all.nextSibling!.textContent =
-            `Apply to all (${scrobbleData.length}) past scrobbles of ${tracks} tracks`;
+        elements.edit_all.nextSibling!.textContent = tracks > 1
+            ? `Apply to all (${scrobbleData.length}) past scrobbles of ${tracks} tracks`
+            : elements.edit_all.nextSibling!.textContent!.replace(/\d+/, scrobbleData.length.toString());
 
         const hiddenInput = document.createElement('input');
         hiddenInput.type = 'hidden';
@@ -711,8 +704,6 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[]) {
         elements.create_automatic_edit_rule.nextSibling!.textContent =
             `Apply to all future scrobbles of ${tracks} tracks`;
     }
-
-    // update the "Automatic scrobble" checkbox
 
     // each exact track, artist, album and album artist combination is considered a distinct scrobble
     const distinctGroups = groupBy(scrobbleData, (s) => JSON.stringify({

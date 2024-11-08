@@ -27,7 +27,7 @@ export async function displayAlbumName(element: Element) {
 
         // Extract album link and name from cover art and scrobble edit form.
         const albumHref = coverArtAnchor.getAttribute('href');
-        const form = row.querySelector<HTMLFormElement>('form[data-edit-scrobble]:not([data-edit-scrobbles])');
+        const form = row.querySelector<HTMLFormElement>('form[data-edit-scrobble]:not([data-bulk-edit-scrobbles])');
         let albumName: string | undefined;
 
         if (form !== null) {
