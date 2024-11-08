@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.5.9
+// @version 1.6.0
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -878,11 +878,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const he_1 = __importDefault(__webpack_require__(488));
+const constants_1 = __webpack_require__(921);
 const create_timestamp_links_1 = __webpack_require__(641);
 const display_album_name_1 = __webpack_require__(308);
 const enhance_automatic_edits_page_1 = __webpack_require__(252);
+const LoadingModal_1 = __webpack_require__(694);
+const Modal_1 = __webpack_require__(946);
 const utils_1 = __webpack_require__(135);
-const constants_1 = __webpack_require__(921);
 // use the top-right link to determine the current user
 const authLink = document.querySelector('a.auth-link');
 // https://regex101.com/r/UCmC8f/1
@@ -891,32 +893,17 @@ const artistRegExp = new RegExp(`^${authLink === null || authLink === void 0 ? v
 const domParser = new DOMParser();
 const editScrobbleFormTemplate = document.createElement('template');
 editScrobbleFormTemplate.innerHTML = `
-    <form method="POST" action="${authLink === null || authLink === void 0 ? void 0 : authLink.href}/library/edit?edited-variation=library-track-scrobble" data-edit-scrobble data-edit-scrobbles>
+    <form method="POST" action="${authLink === null || authLink === void 0 ? void 0 : authLink.getAttribute('href')}/library/edit?edited-variation=library-track-scrobble" data-edit-scrobble data-edit-scrobbles>
         <input type="hidden" name="csrfmiddlewaretoken" value="">
         <input type="hidden" name="artist_name" value="">
         <input type="hidden" name="track_name" value="">
         <input type="hidden" name="album_name" value="">
         <input type="hidden" name="album_artist_name" value="">
         <input type="hidden" name="timestamp" value="">
-        <button type="submit" class="mimic-link dropdown-menu-clickable-item more-item--edit-old" data-analytics-action="EditScrobbleOpen">
+        <button type="submit" class="mimic-link dropdown-menu-clickable-item more-item--edit-old" data-analytics-action="EditScrobblesOpen">
             Edit scrobbles
         </button>
     </form>`;
-const modalTemplate = document.createElement('template');
-modalTemplate.innerHTML = `
-    <div class="popup_background"
-        style="opacity: 0.8; visibility: visible; background-color: rgb(0, 0, 0); position: fixed; top: 0px; right: 0px; bottom: 0px; left: 0px;">
-    </div>
-    <div class="popup_wrapper popup_wrapper_visible" style="opacity: 1; visibility: visible; position: fixed; overflow: auto; width: 100%; height: 100%; top: 0px; left: 0px; text-align: center;">
-        <div class="modal-dialog popup_content" role="dialog" aria-labelledby="modal-label" data-popup-initialized="true" aria-hidden="false" style="opacity: 1; visibility: visible; pointer-events: auto; display: inline-block; outline: none; text-align: left; position: relative; vertical-align: middle;" tabindex="-1">
-            <div class="modal-content">
-                <div class="modal-body">
-                    <h2 class="modal-title"></h2>
-                </div>
-            </div>
-        </div>
-        <div class="popup_align" style="display: inline-block; vertical-align: middle; height: 100%;"></div>
-    </div>`;
 if (authLink) {
     initialize();
 }
@@ -951,18 +938,18 @@ function initialize() {
 function appendStyle() {
     const style = document.createElement('style');
     style.innerHTML = `
-        .${constants_1.namespace}-abbr {
-            cursor: help;
+        .${constants_1.namespace}-title[title] {
+            cursor: help !important;
         }
 
         @media (pointer: coarse), (hover: none) {
-            .${constants_1.namespace}-abbr[title]:focus {
+            .${constants_1.namespace}-title[title]:focus {
                 position: relative;
                 display: inline-flex;
                 justify-content: center;
             }
 
-            .${constants_1.namespace}-abbr[title]:focus::after {
+            .${constants_1.namespace}-title[title]:focus::after {
                 content: attr(title);
                 position: absolute;
                 top: 100%;
@@ -1106,9 +1093,13 @@ function getEditScrobbleForm(url, row) {
             event.stopImmediatePropagation();
             return;
         }
-        const loadingModal = createLoadingModal('Waiting for Last.fm...');
-        await augmentEditScrobbleForm(urlType, scrobbleData);
-        loadingModal.hide();
+        const loadingModal = createLoadingModal('Waiting for Last.fm...', { dismissible: true });
+        try {
+            await augmentEditScrobbleForm(scrobbleData);
+        }
+        finally {
+            loadingModal.hide();
+        }
         submit = false;
     });
     form.addEventListener('submit', async (event) => {
@@ -1118,9 +1109,16 @@ function getEditScrobbleForm(url, row) {
         event.preventDefault();
         event.stopImmediatePropagation();
         if (!allScrobbleData) {
-            const loadingModal = createLoadingModal('Loading Scrobbles...', { display: 'percentage' });
-            allScrobbleData = await fetchScrobbleData(url, loadingModal, loadingModal);
-            loadingModal.hide();
+            const loadingModal = createLoadingModal('Loading Scrobbles...', { dismissible: true, display: 'percentage' });
+            try {
+                allScrobbleData = await fetchScrobbleData(url, loadingModal, loadingModal);
+                if (!loadingModal.isAttached) {
+                    return;
+                }
+            }
+            finally {
+                loadingModal.hide();
+            }
         }
         scrobbleData = allScrobbleData;
         // use JSON strings as album keys to uniquely identify combinations of album + album artists
@@ -1269,7 +1267,7 @@ function prompt(title, body) {
         const content = document.createElement('div');
         content.className = 'content-form';
         content.appendChild(form);
-        const modal = new Modal(title, content, {
+        const modal = new Modal_1.Modal(title, content, {
             dismissible: true,
             events: {
                 hide: reject,
@@ -1284,106 +1282,10 @@ function prompt(title, body) {
         modal.show();
     });
 }
-class Modal {
-    constructor(title, body, options) {
-        this.addedClass = false;
-        this.element = document.createElement('div');
-        this.options = options;
-        const fragment = modalTemplate.content.cloneNode(true);
-        const modalTitle = fragment.querySelector('.modal-title');
-        if (title instanceof Element) {
-            modalTitle.insertAdjacentElement('beforeend', title);
-        }
-        else {
-            modalTitle.insertAdjacentHTML('beforeend', title);
-        }
-        const modalBody = fragment.querySelector('.modal-body');
-        if (body instanceof Element) {
-            modalBody.insertAdjacentElement('beforeend', body);
-        }
-        else {
-            modalBody.insertAdjacentHTML('beforeend', body);
-        }
-        if (options && options.dismissible) {
-            // create X button that closes the modal
-            const closeButton = document.createElement('button');
-            closeButton.className = 'modal-dismiss sr-only';
-            closeButton.textContent = 'Close';
-            closeButton.addEventListener('click', () => this.hide());
-            // create modal actions div
-            const modalActions = document.createElement('div');
-            modalActions.className = 'modal-actions';
-            modalActions.appendChild(closeButton);
-            // append modal actions to modal content
-            const modalContent = fragment.querySelector('.modal-content');
-            modalContent.insertBefore(modalActions, modalContent.firstElementChild);
-            // close modal when user clicks outside modal
-            const popupWrapper = fragment.querySelector('.popup_wrapper');
-            popupWrapper.addEventListener('click', (event) => {
-                if (event.target instanceof Node && !modalContent.contains(event.target)) {
-                    this.hide();
-                }
-            });
-        }
-        this.element.appendChild(fragment);
-    }
-    show() {
-        if (this.element.parentNode)
-            return;
-        document.body.appendChild(this.element);
-        if (!document.documentElement.classList.contains('popup_visible')) {
-            document.documentElement.classList.add('popup_visible');
-            this.addedClass = true;
-        }
-    }
-    hide() {
-        if (!this.element.parentNode)
-            return;
-        this.element.parentNode.removeChild(this.element);
-        if (this.addedClass) {
-            document.documentElement.classList.remove('popup_visible');
-            this.addedClass = false;
-        }
-        if (this.options && this.options.events && this.options.events.hide) {
-            this.options.events.hide();
-        }
-    }
-}
-class LoadingModal extends Modal {
-    constructor(title, options) {
-        const body = `
-            <div class="${constants_1.namespace}-loading">
-                <div class="${constants_1.namespace}-progress"></div>
-            </div>`;
-        super(title, body, options);
-        this.completed = false;
-        this.steps = [];
-        this.weight = 0;
-        this.progress = this.element.querySelector(`.${constants_1.namespace}-progress`);
-    }
-    refreshProgress() {
-        switch (this.options && this.options.display) {
-            case 'count':
-                this.progress.textContent = `${this.steps.filter((s) => s.completed).length} / ${this.steps.length}`;
-                break;
-            case 'percentage':
-                this.progress.textContent = Math.floor(getCompletionRatio(this.steps) * 100) + '%';
-                break;
-        }
-    }
-}
 function createLoadingModal(title, options) {
-    const modal = new LoadingModal(title, options);
+    const modal = new LoadingModal_1.LoadingModal(title, options);
     modal.show();
     return modal;
-}
-// calculates the completion ratio from a tree of steps with weights and child steps
-function getCompletionRatio(steps) {
-    const totalWeight = steps.map((s) => s.weight).reduce((a, b) => a + b, 0);
-    if (totalWeight === 0)
-        return 0;
-    const completedWeight = steps.map((s) => s.weight * (s.completed ? 1 : getCompletionRatio(s.steps))).reduce((a, b) => a + b, 0);
-    return completedWeight / totalWeight;
 }
 // this is a recursive function that browses pages of artists, albums and tracks to gather scrobbles
 async function fetchScrobbleData(url, loadingModal, parentStep) {
@@ -1517,30 +1419,28 @@ function applyFormData(form, formData) {
     }
 }
 // augments the default Edit Scrobble form to include new features
-async function augmentEditScrobbleForm(urlType, scrobbleData) {
+async function augmentEditScrobbleForm(scrobbleData) {
     const wrapper = await observeChildList(document.body, '.popup_wrapper');
     // wait 1 frame
-    await new Promise((resolve) => setTimeout(() => { resolve(); }));
+    await (0, utils_1.delay)(1);
     const popup = wrapper.querySelector('.popup_content');
     const title = popup.querySelector('.modal-title');
     const form = popup.querySelector('form[action$="/library/edit?edited-variation=library-track-scrobble"]');
     const elements = form.elements;
-    title.textContent = `Edit ${urlType} Scrobbles`;
-    title.style.textTransform = 'capitalize';
+    title.textContent = `Edit Scrobbles`;
     // remove traces of the first scrobble that was used to initialize the form
-    form.removeChild(form.querySelector('.form-group--timestamp'));
-    form.removeChild(elements.track_name_original);
-    form.removeChild(elements.artist_name_original);
-    form.removeChild(elements.album_name_original);
-    form.removeChild(elements.album_artist_name_original);
+    const topBox = form.querySelector('.edit-scrobble-top-box');
+    if (topBox) {
+        form.removeChild(topBox);
+    }
     const track_name_input = elements.track_name;
     const artist_name_input = elements.artist_name;
     const album_name_input = elements.album_name;
     const album_artist_name_input = elements.album_artist_name;
-    const tracks = augmentInput(scrobbleData, popup, elements, track_name_input, 'tracks');
-    augmentInput(scrobbleData, popup, elements, artist_name_input, 'artists');
-    augmentInput(scrobbleData, popup, elements, album_name_input, 'albums');
-    augmentInput(scrobbleData, popup, elements, album_artist_name_input, 'album artists');
+    const tracks = augmentInput(scrobbleData, popup, elements, elements.track_name_original, track_name_input, 'tracks');
+    augmentInput(scrobbleData, popup, elements, elements.artist_name_original, artist_name_input, 'artists');
+    augmentInput(scrobbleData, popup, elements, elements.album_name_original, album_name_input, 'albums');
+    augmentInput(scrobbleData, popup, elements, elements.album_artist_name_original, album_artist_name_input, 'album artists');
     // add information alert about album artists being kept in sync
     if (album_artist_name_input.placeholder === 'Mixed' && scrobbleData.some((s) => s.get('album_artist_name') === artist_name_input.value)) {
         const messageTemplate = document.createElement('template');
@@ -1551,9 +1451,10 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
                 </div>
             </div>`;
         const message = messageTemplate.content.firstElementChild.cloneNode(true);
-        album_artist_name_input.parentNode.insertBefore(message, album_artist_name_input.nextElementSibling);
+        const formGroup = album_artist_name_input.parentElement;
+        formGroup.parentElement.insertBefore(message, formGroup.nextElementSibling.nextElementSibling);
         const removeMessage = () => {
-            message.parentNode.removeChild(message);
+            message.parentElement.removeChild(message);
             album_artist_name_input.removeEventListener('input', removeMessage);
             album_artist_name_input.removeEventListener('keydown', removeMessage);
         };
@@ -1569,39 +1470,25 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
         }
         previousValue = artist_name_input.value;
     });
-    // update the "Automatic edit" checkbox label
-    const automaticEditFormGroup = form.querySelector('.form-group--create_automatic_edit_rule');
-    if (automaticEditFormGroup && urlType !== 'track') {
-        const label = automaticEditFormGroup.querySelector('.checkbox label').lastChild;
-        label.textContent = label.textContent.replace('of this track', `for ${tracks} track${tracks !== 1 ? 's' : ''} of this ${urlType}`);
+    // update the "Bulk edit" checkbox
+    if (elements.edit_all) {
+        elements.edit_all.checked = true;
+        elements.edit_all.disabled = true;
+        elements.edit_all.parentElement.style.cursor = 'auto';
+        elements.edit_all.nextSibling.textContent =
+            `Apply to all (${scrobbleData.length}) past scrobbles of ${tracks} tracks`;
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = elements.edit_all.name;
+        hiddenInput.value = elements.edit_all.value;
+        elements.edit_all.parentElement.insertBefore(hiddenInput, elements.edit_all.nextElementSibling);
     }
-    // replace the "Bulk edit" checkbox with one that cannot be disabled
-    let bulkEditFormGroup = form.querySelector('.form-group--edit_all');
-    if (bulkEditFormGroup)
-        form.removeChild(bulkEditFormGroup);
-    const types = ['artist', 'track', 'album', 'album artist'];
-    types.splice(types.indexOf(urlType), 1);
-    const summary = `${types[0]}, ${types[1]} and ${types[2]}`;
-    const bulkEditFormGroupTemplate = document.createElement('template');
-    bulkEditFormGroupTemplate.innerHTML = `
-        <div class="form-group form-group--edit_all js-form-group">
-            <label for="id_edit_all" class="control-label">Bulk edit</label>
-            <div class="js-form-group-controls form-group-controls">
-                <div class="checkbox">
-                    <label for="id_edit_all">
-                        <input id="id_edit_all" type="checkbox" checked disabled>
-                        <input name="edit_all" type="hidden" value="true">
-                        Edit all
-                        <span class="abbr ${constants_1.namespace}-abbr" tabindex="-1" title="You have scrobbled any combination of ${summary} ${scrobbleData.length} times">
-                            ${scrobbleData.length} scrobbles
-                        </span>
-                        of this ${urlType}
-                    </label>
-                </div>
-            </div>
-        </div>`;
-    bulkEditFormGroup = bulkEditFormGroupTemplate.content.firstElementChild.cloneNode(true);
-    form.insertBefore(bulkEditFormGroup, automaticEditFormGroup !== null && automaticEditFormGroup !== void 0 ? automaticEditFormGroup : form.lastElementChild);
+    // update the "Automatic edit" checkbox
+    if (tracks > 1) {
+        elements.create_automatic_edit_rule.nextSibling.textContent =
+            `Apply to all future scrobbles of ${tracks} tracks`;
+    }
+    // update the "Automatic scrobble" checkbox
     // each exact track, artist, album and album artist combination is considered a distinct scrobble
     const distinctGroups = groupBy(scrobbleData, (s) => {
         var _a, _b;
@@ -1675,6 +1562,7 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
                 else {
                     clonedFormData.set('album_artist_name', album_artist_name_sync);
                 }
+                clonedFormData.set('ajax', '1');
                 formDataToSubmit.push(clonedFormData);
             }
         }
@@ -1685,7 +1573,7 @@ async function augmentEditScrobbleForm(urlType, scrobbleData) {
         // hide the Edit Scrobble form
         const cancelButton = form.querySelector('button.js-close');
         cancelButton.click();
-        const loadingModal = createLoadingModal('Saving Edits...', { display: 'count' });
+        const loadingModal = createLoadingModal('Saving Edits...', { dismissible: false, display: 'count' });
         const parentStep = loadingModal;
         // run edits in series, inconsistencies will arise if you use a parallel loop
         await forEach(loadingModal, parentStep, formDataToSubmit, async (formData) => {
@@ -1724,20 +1612,39 @@ function observeChildList(target, selector) {
     });
 }
 // turns a normal input into an input that supports the "Mixed" state
-function augmentInput(scrobbleData, popup, inputs, input, plural) {
+function augmentInput(scrobbleData, popup, inputs, originalInput, input, plural) {
     var _a;
+    const formGroup = input.closest('.form-group');
     const groups = [...groupBy(scrobbleData, (s) => s.get(input.name))].sort((a, b) => b[1].length - a[1].length);
     if (groups.length >= 2) {
         // display the "Mixed" placeholder when there are two or more possible values
+        originalInput.value = '';
+        originalInput.placeholder = 'Mixed';
         input.value = '';
         input.placeholder = 'Mixed';
-        const tab = '\xa0'.repeat(8); // 8 non-breaking spaces
+        // remove the "Originally" text that only shows on small screens
+        let elementToRemove = formGroup.previousElementSibling;
+        while (elementToRemove !== null) {
+            if (elementToRemove.classList.contains('edit-scrobble-label--originally')) {
+                elementToRemove.parentElement.removeChild(elementToRemove);
+                break;
+            }
+            elementToRemove = elementToRemove.previousElementSibling;
+        }
+        // display informational element
+        const maxFigureLength = groups[0][1].length.toString().length;
         const abbr = document.createElement('span');
-        abbr.className = `abbr ${constants_1.namespace}-abbr`;
+        abbr.className = `abbr ${constants_1.namespace}-title`;
         abbr.tabIndex = -1;
         abbr.textContent = `${groups.length} ${plural}`;
-        abbr.title = groups.map(([key, values]) => `${values.length}x${tab}${key !== null && key !== void 0 ? key : ''}`).join('\n');
-        input.parentNode.insertBefore(abbr, input.nextElementSibling);
+        abbr.title = groups
+            .map(([key, values]) => {
+            const figureLength = values.length.toString().length;
+            const figureSpaces = '\u2007'.repeat(maxFigureLength - figureLength);
+            return `${figureSpaces}${values.length}x ${key !== null && key !== void 0 ? key : ''}`;
+        })
+            .join('\n');
+        formGroup.parentElement.insertBefore(abbr, formGroup.nextElementSibling);
         input.dataset['confirm'] = `You are about to merge scrobbles for ${groups.length} ${plural}. This cannot be undone. Would you like to continue?`;
         // datalist: a native HTML5 autocomplete feature
         const datalist = document.createElement('datalist');
@@ -1749,10 +1656,9 @@ function augmentInput(scrobbleData, popup, inputs, input, plural) {
         }
         input.autocomplete = 'off';
         input.setAttribute('list', datalist.id);
-        input.parentNode.insertBefore(datalist, input.nextElementSibling);
+        formGroup.insertBefore(datalist, input.nextElementSibling);
     }
     // display green color when field was edited, red if it's not allowed to be empty
-    const formGroup = input.closest('.form-group');
     const defaultValue = input.value;
     input.addEventListener('input', () => {
         input.placeholder = ''; // removes "Mixed" state
@@ -1818,6 +1724,146 @@ function cloneFormData(formData) {
     }
     return clonedFormData;
 }
+
+
+/***/ }),
+
+/***/ 694:
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.LoadingModal = void 0;
+const constants_1 = __webpack_require__(921);
+const Modal_1 = __webpack_require__(946);
+class LoadingModal extends Modal_1.Modal {
+    constructor(title, options) {
+        const body = `
+            <div class="${constants_1.namespace}-loading">
+                <div class="${constants_1.namespace}-progress"></div>
+            </div>`;
+        super(title, body, options);
+        this.completed = false;
+        this.steps = [];
+        this.weight = 0;
+        this.progress = this.element.querySelector(`.${constants_1.namespace}-progress`);
+    }
+    refreshProgress() {
+        switch (this.options && this.options.display) {
+            case 'count':
+                this.progress.textContent = `${this.steps.filter((s) => s.completed).length} / ${this.steps.length}`;
+                break;
+            case 'percentage':
+                this.progress.textContent = Math.floor(getCompletionRatio(this.steps) * 100) + '%';
+                break;
+        }
+    }
+}
+exports.LoadingModal = LoadingModal;
+// calculates the completion ratio from a tree of steps with weights and child steps
+function getCompletionRatio(steps) {
+    const totalWeight = steps.map((s) => s.weight).reduce((a, b) => a + b, 0);
+    if (totalWeight === 0)
+        return 0;
+    const completedWeight = steps.map((s) => s.weight * (s.completed ? 1 : getCompletionRatio(s.steps))).reduce((a, b) => a + b, 0);
+    return completedWeight / totalWeight;
+}
+
+
+/***/ }),
+
+/***/ 946:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Modal = void 0;
+class Modal {
+    constructor(title, body, options) {
+        this.addedClass = false;
+        this.element = document.createElement('div');
+        this.options = options;
+        const fragment = modalTemplate.content.cloneNode(true);
+        const modalTitle = fragment.querySelector('.modal-title');
+        if (title instanceof Element) {
+            modalTitle.insertAdjacentElement('beforeend', title);
+        }
+        else {
+            modalTitle.insertAdjacentHTML('beforeend', title);
+        }
+        const modalBody = fragment.querySelector('.modal-body');
+        if (body instanceof Element) {
+            modalBody.insertAdjacentElement('beforeend', body);
+        }
+        else {
+            modalBody.insertAdjacentHTML('beforeend', body);
+        }
+        if (options && options.dismissible) {
+            // create X button that closes the modal
+            const closeButton = document.createElement('button');
+            closeButton.className = 'modal-dismiss sr-only';
+            closeButton.textContent = 'Close';
+            closeButton.addEventListener('click', () => this.hide());
+            // create modal actions div
+            const modalActions = document.createElement('div');
+            modalActions.className = 'modal-actions';
+            modalActions.appendChild(closeButton);
+            // append modal actions to modal content
+            const modalContent = fragment.querySelector('.modal-content');
+            modalContent.insertBefore(modalActions, modalContent.firstElementChild);
+            // close modal when user clicks outside modal
+            const popupWrapper = fragment.querySelector('.popup_wrapper');
+            popupWrapper.addEventListener('click', (event) => {
+                if (event.target instanceof Node && !modalContent.contains(event.target)) {
+                    this.hide();
+                }
+            });
+        }
+        this.element.appendChild(fragment);
+    }
+    get isAttached() {
+        return !!this.element.parentNode;
+    }
+    show() {
+        if (this.element.parentNode)
+            return;
+        document.body.appendChild(this.element);
+        if (!document.documentElement.classList.contains('popup_visible')) {
+            document.documentElement.classList.add('popup_visible');
+            this.addedClass = true;
+        }
+    }
+    hide() {
+        if (!this.element.parentNode)
+            return;
+        this.element.parentNode.removeChild(this.element);
+        if (this.addedClass) {
+            document.documentElement.classList.remove('popup_visible');
+            this.addedClass = false;
+        }
+        if (this.options && this.options.events && this.options.events.hide) {
+            this.options.events.hide();
+        }
+    }
+}
+exports.Modal = Modal;
+const modalTemplate = document.createElement('template');
+modalTemplate.innerHTML = `
+    <div class="popup_background"
+        style="opacity: 0.8; visibility: visible; background-color: rgb(0, 0, 0); position: fixed; top: 0px; right: 0px; bottom: 0px; left: 0px;">
+    </div>
+    <div class="popup_wrapper popup_wrapper_visible" style="opacity: 1; visibility: visible; position: fixed; overflow: auto; width: 100%; height: 100%; top: 0px; left: 0px; text-align: center;">
+        <div class="modal-dialog popup_content" role="dialog" aria-labelledby="modal-label" data-popup-initialized="true" aria-hidden="false" style="opacity: 1; visibility: visible; pointer-events: auto; display: inline-block; outline: none; text-align: left; position: relative; vertical-align: middle;" tabindex="-1">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <h2 class="modal-title"></h2>
+                </div>
+            </div>
+        </div>
+        <div class="popup_align" style="display: inline-block; vertical-align: middle; height: 100%;"></div>
+    </div>`;
 
 
 /***/ }),
