@@ -8,13 +8,14 @@ toolbarTemplate.innerHTML = `
         <button type="button" class="btn-primary" disabled>
             View All At Once
         </button>
-        Go to artist: <select></select>
+        Go to album artist: <select></select>
     </div>`;
 
 const domParser = new DOMParser();
 
 const artistMap = new Map<string, Artist>();
 let artistSelect: HTMLSelectElement | undefined = undefined;
+let scrollArtistIntoView = false;
 
 let loadPagesPromise: Promise<Page[]> | undefined = undefined;
 let loadPagesProgressElement: HTMLElement | undefined = undefined;
@@ -83,8 +84,9 @@ export async function enhanceAutomaticEditsPage(element: Element) {
     artistSelect.addEventListener('change', function () {
         const selectedArtist = artistMap.get(this.value)!;
         const anchor = document.createElement('a');
-        anchor.href = `?page=${selectedArtist.pageNumber}&artist=${encodeURIComponent2(selectedArtist.name)}`;
+        anchor.href = `?page=${selectedArtist.pageNumber}&album-artist=${encodeURIComponent2(selectedArtist.name)}`;
         document.body.appendChild(anchor);
+		scrollArtistIntoView = true;
         anchor.click();
         document.body.removeChild(anchor);
     });
@@ -102,7 +104,7 @@ export async function enhanceAutomaticEditsPage(element: Element) {
     viewAllButton.disabled = false;
 
     viewAllButton.addEventListener('click', async () => {
-        if (pages.length >= 100 && !window.confirm(`You are about to view ${pages.length} pages at once. This might take a long time to load. Are you sure?`)) {
+        if (pages.length >= 10 && !window.confirm(`You are about to view ${pages.length} pages at once. This might take a long time to load. Are you sure?`)) {
             return;
         }
 
@@ -149,7 +151,7 @@ function enhanceTable(table: HTMLTableElement) {
         'artist_name_original',
         'album_name_original',
         'album_artist_name_original',
-    ]
+    ];
 
     for (let i = 0; i < 4; i++) {
         const key = keys[i];
@@ -239,8 +241,13 @@ function enhanceRow(row: HTMLTableRowElement) {
         emphasize(row.cells[3], albumArtistName);
     }
 
-    if (originalArtistName.toLowerCase() === getSelectedArtistKey()) {
+    if (originalAlbumArtistName.toLowerCase() === getSelectedArtistKey()) {
         row.classList.add(`${namespace}-highlight`);
+
+		if (scrollArtistIntoView) {
+			scrollArtistIntoView = false;
+			row.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		}
     }
 }
 
@@ -249,7 +256,7 @@ function getFormData(row: HTMLTableRowElement) {
 }
 
 function getSelectedArtistKey() {
-    return new URLSearchParams(location.search).get('artist')?.toLowerCase();
+    return new URLSearchParams(location.search).get('album-artist')?.toLowerCase();
 }
 
 async function loadPages(table: HTMLTableElement, currentPageNumber: number, pageCount: number) {
@@ -298,7 +305,7 @@ function addArtistsToSelect(page: Page) {
 
     for (const row of page.rows) {
         const formData = getFormData(row);
-        const name = formData.get('artist_name_original')!.toString();
+        const name = formData.get('album_artist_name_original')!.toString();
         const sortName = name.replace(/\s+/g, '');
 
         const key = name.toLowerCase();

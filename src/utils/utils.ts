@@ -1,7 +1,7 @@
 import { Semaphore } from 'async-mutex';
 
 export function delay(ms: number) {
-	return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export function encodeURIComponent2(uriComponent: string) {
@@ -13,7 +13,7 @@ let delayPromise: Promise<void> | undefined = undefined;
 let delayTooManyRequestsMs = 10000;
 
 export async function fetchAndRetry<TResult = Response>(url: string, init?: RequestInit | undefined, callback?: (response: Response, i: number) => Promise<TResult | undefined>): Promise<TResult> {
-	callback ??= async (response) => response as TResult;
+    callback ??= async (response) => response as TResult;
 
     return await semaphore.runExclusive(async () => {
         let delayResolver!: () => void;

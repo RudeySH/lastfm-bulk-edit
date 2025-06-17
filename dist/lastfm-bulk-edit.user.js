@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Bulk Edit
 // @description Bulk edit your scrobbles for any artist or album on Last.fm at once.
-// @version 1.6.1
+// @version 1.6.2
 // @author Rudey
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -17,852 +17,84 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 406:
+/***/ 135:
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-var tslib_1 = __webpack_require__(653);
-var Semaphore_1 = __webpack_require__(919);
-var Mutex = /** @class */ (function () {
-    function Mutex(cancelError) {
-        this._semaphore = new Semaphore_1.default(1, cancelError);
-    }
-    Mutex.prototype.acquire = function () {
-        return tslib_1.__awaiter(this, arguments, void 0, function (priority) {
-            var _a, releaser;
-            if (priority === void 0) { priority = 0; }
-            return tslib_1.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0: return [4 /*yield*/, this._semaphore.acquire(1, priority)];
-                    case 1:
-                        _a = _b.sent(), releaser = _a[1];
-                        return [2 /*return*/, releaser];
-                }
-            });
-        });
-    };
-    Mutex.prototype.runExclusive = function (callback, priority) {
-        if (priority === void 0) { priority = 0; }
-        return this._semaphore.runExclusive(function () { return callback(); }, 1, priority);
-    };
-    Mutex.prototype.isLocked = function () {
-        return this._semaphore.isLocked();
-    };
-    Mutex.prototype.waitForUnlock = function (priority) {
-        if (priority === void 0) { priority = 0; }
-        return this._semaphore.waitForUnlock(1, priority);
-    };
-    Mutex.prototype.release = function () {
-        if (this._semaphore.isLocked())
-            this._semaphore.release();
-    };
-    Mutex.prototype.cancel = function () {
-        return this._semaphore.cancel();
-    };
-    return Mutex;
-}());
-exports["default"] = Mutex;
-
-
-/***/ }),
-
-/***/ 919:
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-var tslib_1 = __webpack_require__(653);
-var errors_1 = __webpack_require__(586);
-var Semaphore = /** @class */ (function () {
-    function Semaphore(_value, _cancelError) {
-        if (_cancelError === void 0) { _cancelError = errors_1.E_CANCELED; }
-        this._value = _value;
-        this._cancelError = _cancelError;
-        this._queue = [];
-        this._weightedWaiters = [];
-    }
-    Semaphore.prototype.acquire = function (weight, priority) {
-        var _this = this;
-        if (weight === void 0) { weight = 1; }
-        if (priority === void 0) { priority = 0; }
-        if (weight <= 0)
-            throw new Error("invalid weight ".concat(weight, ": must be positive"));
-        return new Promise(function (resolve, reject) {
-            var task = { resolve: resolve, reject: reject, weight: weight, priority: priority };
-            var i = findIndexFromEnd(_this._queue, function (other) { return priority <= other.priority; });
-            if (i === -1 && weight <= _this._value) {
-                // Needs immediate dispatch, skip the queue
-                _this._dispatchItem(task);
-            }
-            else {
-                _this._queue.splice(i + 1, 0, task);
-            }
-        });
-    };
-    Semaphore.prototype.runExclusive = function (callback_1) {
-        return tslib_1.__awaiter(this, arguments, void 0, function (callback, weight, priority) {
-            var _a, value, release;
-            if (weight === void 0) { weight = 1; }
-            if (priority === void 0) { priority = 0; }
-            return tslib_1.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0: return [4 /*yield*/, this.acquire(weight, priority)];
-                    case 1:
-                        _a = _b.sent(), value = _a[0], release = _a[1];
-                        _b.label = 2;
-                    case 2:
-                        _b.trys.push([2, , 4, 5]);
-                        return [4 /*yield*/, callback(value)];
-                    case 3: return [2 /*return*/, _b.sent()];
-                    case 4:
-                        release();
-                        return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    Semaphore.prototype.waitForUnlock = function (weight, priority) {
-        var _this = this;
-        if (weight === void 0) { weight = 1; }
-        if (priority === void 0) { priority = 0; }
-        if (weight <= 0)
-            throw new Error("invalid weight ".concat(weight, ": must be positive"));
-        if (this._couldLockImmediately(weight, priority)) {
-            return Promise.resolve();
-        }
-        else {
-            return new Promise(function (resolve) {
-                if (!_this._weightedWaiters[weight - 1])
-                    _this._weightedWaiters[weight - 1] = [];
-                insertSorted(_this._weightedWaiters[weight - 1], { resolve: resolve, priority: priority });
-            });
-        }
-    };
-    Semaphore.prototype.isLocked = function () {
-        return this._value <= 0;
-    };
-    Semaphore.prototype.getValue = function () {
-        return this._value;
-    };
-    Semaphore.prototype.setValue = function (value) {
-        this._value = value;
-        this._dispatchQueue();
-    };
-    Semaphore.prototype.release = function (weight) {
-        if (weight === void 0) { weight = 1; }
-        if (weight <= 0)
-            throw new Error("invalid weight ".concat(weight, ": must be positive"));
-        this._value += weight;
-        this._dispatchQueue();
-    };
-    Semaphore.prototype.cancel = function () {
-        var _this = this;
-        this._queue.forEach(function (entry) { return entry.reject(_this._cancelError); });
-        this._queue = [];
-    };
-    Semaphore.prototype._dispatchQueue = function () {
-        this._drainUnlockWaiters();
-        while (this._queue.length > 0 && this._queue[0].weight <= this._value) {
-            this._dispatchItem(this._queue.shift());
-            this._drainUnlockWaiters();
-        }
-    };
-    Semaphore.prototype._dispatchItem = function (item) {
-        var previousValue = this._value;
-        this._value -= item.weight;
-        item.resolve([previousValue, this._newReleaser(item.weight)]);
-    };
-    Semaphore.prototype._newReleaser = function (weight) {
-        var _this = this;
-        var called = false;
-        return function () {
-            if (called)
-                return;
-            called = true;
-            _this.release(weight);
-        };
-    };
-    Semaphore.prototype._drainUnlockWaiters = function () {
-        if (this._queue.length === 0) {
-            for (var weight = this._value; weight > 0; weight--) {
-                var waiters = this._weightedWaiters[weight - 1];
-                if (!waiters)
-                    continue;
-                waiters.forEach(function (waiter) { return waiter.resolve(); });
-                this._weightedWaiters[weight - 1] = [];
-            }
-        }
-        else {
-            var queuedPriority_1 = this._queue[0].priority;
-            for (var weight = this._value; weight > 0; weight--) {
-                var waiters = this._weightedWaiters[weight - 1];
-                if (!waiters)
-                    continue;
-                var i = waiters.findIndex(function (waiter) { return waiter.priority <= queuedPriority_1; });
-                (i === -1 ? waiters : waiters.splice(0, i))
-                    .forEach((function (waiter) { return waiter.resolve(); }));
-            }
-        }
-    };
-    Semaphore.prototype._couldLockImmediately = function (weight, priority) {
-        return (this._queue.length === 0 || this._queue[0].priority < priority) &&
-            weight <= this._value;
-    };
-    return Semaphore;
-}());
-function insertSorted(a, v) {
-    var i = findIndexFromEnd(a, function (other) { return v.priority <= other.priority; });
-    a.splice(i + 1, 0, v);
+exports.delay = delay;
+exports.encodeURIComponent2 = encodeURIComponent2;
+exports.fetchAndRetry = fetchAndRetry;
+const async_mutex_1 = __webpack_require__(693);
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
-function findIndexFromEnd(a, predicate) {
-    for (var i = a.length - 1; i >= 0; i--) {
-        if (predicate(a[i])) {
-            return i;
-        }
-    }
-    return -1;
+function encodeURIComponent2(uriComponent) {
+    return encodeURIComponent(uriComponent).replace(/%20/g, '+');
 }
-exports["default"] = Semaphore;
-
-
-/***/ }),
-
-/***/ 586:
-/***/ ((__unused_webpack_module, exports) => {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.E_CANCELED = exports.E_ALREADY_LOCKED = exports.E_TIMEOUT = void 0;
-exports.E_TIMEOUT = new Error('timeout while waiting for mutex to become available');
-exports.E_ALREADY_LOCKED = new Error('mutex already locked');
-exports.E_CANCELED = new Error('request for lock canceled');
-
-
-/***/ }),
-
-/***/ 693:
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.tryAcquire = exports.withTimeout = exports.Semaphore = exports.Mutex = void 0;
-var tslib_1 = __webpack_require__(653);
-var Mutex_1 = __webpack_require__(406);
-Object.defineProperty(exports, "Mutex", ({ enumerable: true, get: function () { return Mutex_1.default; } }));
-var Semaphore_1 = __webpack_require__(919);
-Object.defineProperty(exports, "Semaphore", ({ enumerable: true, get: function () { return Semaphore_1.default; } }));
-var withTimeout_1 = __webpack_require__(646);
-Object.defineProperty(exports, "withTimeout", ({ enumerable: true, get: function () { return withTimeout_1.withTimeout; } }));
-var tryAcquire_1 = __webpack_require__(746);
-Object.defineProperty(exports, "tryAcquire", ({ enumerable: true, get: function () { return tryAcquire_1.tryAcquire; } }));
-tslib_1.__exportStar(__webpack_require__(586), exports);
-
-
-/***/ }),
-
-/***/ 746:
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.tryAcquire = void 0;
-var errors_1 = __webpack_require__(586);
-var withTimeout_1 = __webpack_require__(646);
-// eslint-disable-next-lisne @typescript-eslint/explicit-module-boundary-types
-function tryAcquire(sync, alreadyAcquiredError) {
-    if (alreadyAcquiredError === void 0) { alreadyAcquiredError = errors_1.E_ALREADY_LOCKED; }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (0, withTimeout_1.withTimeout)(sync, 0, alreadyAcquiredError);
-}
-exports.tryAcquire = tryAcquire;
-
-
-/***/ }),
-
-/***/ 646:
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.withTimeout = void 0;
-var tslib_1 = __webpack_require__(653);
-/* eslint-disable @typescript-eslint/no-explicit-any */
-var errors_1 = __webpack_require__(586);
-function withTimeout(sync, timeout, timeoutError) {
-    var _this = this;
-    if (timeoutError === void 0) { timeoutError = errors_1.E_TIMEOUT; }
-    return {
-        acquire: function (weightOrPriority, priority) {
-            var weight;
-            if (isSemaphore(sync)) {
-                weight = weightOrPriority;
-            }
-            else {
-                weight = undefined;
-                priority = weightOrPriority;
-            }
-            if (weight !== undefined && weight <= 0) {
-                throw new Error("invalid weight ".concat(weight, ": must be positive"));
-            }
-            return new Promise(function (resolve, reject) { return tslib_1.__awaiter(_this, void 0, void 0, function () {
-                var isTimeout, handle, ticket, release, e_1;
-                return tslib_1.__generator(this, function (_a) {
-                    switch (_a.label) {
-                        case 0:
-                            isTimeout = false;
-                            handle = setTimeout(function () {
-                                isTimeout = true;
-                                reject(timeoutError);
-                            }, timeout);
-                            _a.label = 1;
-                        case 1:
-                            _a.trys.push([1, 3, , 4]);
-                            return [4 /*yield*/, (isSemaphore(sync)
-                                    ? sync.acquire(weight, priority)
-                                    : sync.acquire(priority))];
-                        case 2:
-                            ticket = _a.sent();
-                            if (isTimeout) {
-                                release = Array.isArray(ticket) ? ticket[1] : ticket;
-                                release();
-                            }
-                            else {
-                                clearTimeout(handle);
-                                resolve(ticket);
-                            }
-                            return [3 /*break*/, 4];
-                        case 3:
-                            e_1 = _a.sent();
-                            if (!isTimeout) {
-                                clearTimeout(handle);
-                                reject(e_1);
-                            }
-                            return [3 /*break*/, 4];
-                        case 4: return [2 /*return*/];
+const semaphore = new async_mutex_1.Semaphore(6);
+let delayPromise = undefined;
+let delayTooManyRequestsMs = 10000;
+async function fetchAndRetry(url, init, callback) {
+    callback !== null && callback !== void 0 ? callback : (callback = async (response) => response);
+    return await semaphore.runExclusive(async () => {
+        var _a;
+        let delayResolver;
+        let delayRejecter;
+        try {
+            // eslint-disable-next-line no-constant-condition
+            for (let i = 0; true; i++) {
+                const response = await fetch(url, init);
+                if (response.ok) {
+                    const result = await callback(response, i);
+                    if (result !== undefined) {
+                        if (delayResolver !== undefined) {
+                            delayPromise = undefined;
+                            delayResolver();
+                        }
+                        return result;
                     }
-                });
-            }); });
-        },
-        runExclusive: function (callback, weight, priority) {
-            return tslib_1.__awaiter(this, void 0, void 0, function () {
-                var release, ticket;
-                return tslib_1.__generator(this, function (_a) {
-                    switch (_a.label) {
-                        case 0:
-                            release = function () { return undefined; };
-                            _a.label = 1;
-                        case 1:
-                            _a.trys.push([1, , 7, 8]);
-                            return [4 /*yield*/, this.acquire(weight, priority)];
-                        case 2:
-                            ticket = _a.sent();
-                            if (!Array.isArray(ticket)) return [3 /*break*/, 4];
-                            release = ticket[1];
-                            return [4 /*yield*/, callback(ticket[0])];
-                        case 3: return [2 /*return*/, _a.sent()];
-                        case 4:
-                            release = ticket;
-                            return [4 /*yield*/, callback()];
-                        case 5: return [2 /*return*/, _a.sent()];
-                        case 6: return [3 /*break*/, 8];
-                        case 7:
-                            release();
-                            return [7 /*endfinally*/];
-                        case 8: return [2 /*return*/];
+                }
+                if (delayPromise === undefined) {
+                    delayPromise = new Promise((resolve, reject) => {
+                        delayResolver = resolve;
+                        delayRejecter = reject;
+                    });
+                    if (response.status === 429) { // Too Many Requests
+                        await delay(delayTooManyRequestsMs);
                     }
-                });
-            });
-        },
-        release: function (weight) {
-            sync.release(weight);
-        },
-        cancel: function () {
-            return sync.cancel();
-        },
-        waitForUnlock: function (weightOrPriority, priority) {
-            var weight;
-            if (isSemaphore(sync)) {
-                weight = weightOrPriority;
-            }
-            else {
-                weight = undefined;
-                priority = weightOrPriority;
-            }
-            if (weight !== undefined && weight <= 0) {
-                throw new Error("invalid weight ".concat(weight, ": must be positive"));
-            }
-            return new Promise(function (resolve, reject) {
-                var handle = setTimeout(function () { return reject(timeoutError); }, timeout);
-                (isSemaphore(sync)
-                    ? sync.waitForUnlock(weight, priority)
-                    : sync.waitForUnlock(priority)).then(function () {
-                    clearTimeout(handle);
-                    resolve();
-                });
-            });
-        },
-        isLocked: function () { return sync.isLocked(); },
-        getValue: function () { return sync.getValue(); },
-        setValue: function (value) { return sync.setValue(value); },
-    };
-}
-exports.withTimeout = withTimeout;
-function isSemaphore(sync) {
-    return sync.getValue !== undefined;
-}
-
-
-/***/ }),
-
-/***/ 692:
-/***/ ((module) => {
-
-async function* asyncPool(concurrency, iterable, iteratorFn) {
-  const executing = new Set();
-  async function consume() {
-    const [promise, value] = await Promise.race(executing);
-    executing.delete(promise);
-    return value;
-  }
-  for (const item of iterable) {
-    // Wrap iteratorFn() in an async fn to ensure we get a promise.
-    // Then expose such promise, so it's possible to later reference and
-    // remove it from the executing pool.
-    const promise = (async () => await iteratorFn(item, iterable))().then(
-      value => [promise, value]
-    );
-    executing.add(promise);
-    if (executing.size >= concurrency) {
-      yield await consume();
-    }
-  }
-  while (executing.size) {
-    yield await consume();
-  }
-}
-
-module.exports = asyncPool;
-
-
-/***/ }),
-
-/***/ 921:
-/***/ ((__unused_webpack_module, exports) => {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.namespace = void 0;
-exports.namespace = 'lastfm-bulk-edit';
-
-
-/***/ }),
-
-/***/ 641:
-/***/ ((__unused_webpack_module, exports) => {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.createTimestampLinks = createTimestampLinks;
-async function createTimestampLinks(element) {
-    var _a;
-    const libraryHref = (_a = document.querySelector('.secondary-nav-item--library a')) === null || _a === void 0 ? void 0 : _a.href;
-    if (!libraryHref) {
-        return;
-    }
-    const cells = element.querySelectorAll('.chartlist-timestamp');
-    for (const cell of cells) {
-        const span = cell.querySelector('span[title]');
-        if (span === null || span.parentNode !== cell) {
-            continue;
-        }
-        let date;
-        if (cell.classList.contains('chartlist-timestamp--lang-en')) {
-            date = new Date(Date.parse(span.title.split(',')[0]));
-        }
-        else {
-            // Languages other than English are not supported.
-            continue;
-        }
-        const dateString = getDateString(date);
-        const link = document.createElement('a');
-        link.href = `${libraryHref}?from=${dateString}&to=${dateString}`;
-        cell.insertBefore(link, span);
-        link.appendChild(span);
-    }
-}
-function getDateString(date) {
-    let s = date.getFullYear() + '-';
-    const month = date.getMonth() + 1;
-    if (month < 10)
-        s += '0';
-    s += month + '-';
-    const day = date.getDate();
-    if (day < 10)
-        s += '0';
-    s += day;
-    return s;
-}
-
-
-/***/ }),
-
-/***/ 308:
-/***/ ((__unused_webpack_module, exports) => {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.displayAlbumName = displayAlbumName;
-async function displayAlbumName(element) {
-    var _a, _b;
-    const rows = element instanceof HTMLTableRowElement ? [element] : element.querySelectorAll('tr');
-    if (rows.length === 0) {
-        return;
-    }
-    const baseHref = (_a = document.querySelector('.secondary-nav-item--overview a')) === null || _a === void 0 ? void 0 : _a.getAttribute('href');
-    for (const row of rows) {
-        // Ignore non-chartlist rows.
-        if (!row.matches('.chartlist-row[data-edit-scrobble-id]')) {
-            continue;
-        }
-        // Ignore non-chartlist tables and tables with an index.
-        const table = row.closest('table');
-        if (table === null || !table.matches('.chartlist:not(.chartlist--with-index)')) {
-            continue;
-        }
-        // Ignore rows without a cover art image or cover art placeholder.
-        const coverArtAnchor = row.querySelector('.cover-art');
-        if (coverArtAnchor === null) {
-            continue;
-        }
-        // Extract album link and name from cover art and scrobble edit form.
-        const albumHref = coverArtAnchor.getAttribute('href');
-        const form = row.querySelector('form[data-edit-scrobble]:not([data-bulk-edit-scrobbles])');
-        let albumName;
-        if (form !== null) {
-            const formData = new FormData(form);
-            albumName = (_b = formData.get('album_name')) === null || _b === void 0 ? void 0 : _b.toString();
-        }
-        else {
-            albumName = coverArtAnchor.querySelector('img').alt;
-        }
-        // Create and insert th element.
-        if (!table.classList.contains('lastfm-bulk-edit-chartlist-scrobbles')) {
-            table.classList.add('lastfm-bulk-edit-chartlist-scrobbles');
-            const albumHeaderCell = document.createElement('th');
-            albumHeaderCell.textContent = 'Album';
-            const headerRow = table.tHead.rows[0];
-            headerRow.insertBefore(albumHeaderCell, headerRow.children[4]);
-        }
-        // Create and insert td element.
-        const albumCell = document.createElement('td');
-        albumCell.className = 'chartlist-album';
-        if (albumHref && albumName) {
-            const albumAnchor = document.createElement('a');
-            albumAnchor.href = albumHref;
-            albumAnchor.title = albumName;
-            albumAnchor.textContent = albumName;
-            albumCell.appendChild(albumAnchor);
-        }
-        else {
-            const noAlbumText = document.createElement('em');
-            noAlbumText.className = 'lastfm-bulk-edit-text-danger';
-            noAlbumText.textContent = 'No Album';
-            albumCell.appendChild(noAlbumText);
-        }
-        const nameCell = row.querySelector('.chartlist-name');
-        row.insertBefore(albumCell, nameCell.nextElementSibling);
-        // Add menu items.
-        if (albumHref && albumName) {
-            const menu = row.querySelector('.chartlist-more-menu');
-            const albumMenuItem1 = document.createElement('li');
-            const menuItemAnchor1 = document.createElement('a');
-            menuItemAnchor1.href = albumHref;
-            menuItemAnchor1.className = 'dropdown-menu-clickable-item more-item--album';
-            menuItemAnchor1.textContent = 'Go to album';
-            albumMenuItem1.appendChild(menuItemAnchor1);
-            const albumMenuItem2 = document.createElement('li');
-            const menuItemAnchor2 = document.createElement('a');
-            menuItemAnchor2.href = baseHref + '/library' + albumHref;
-            menuItemAnchor2.className = 'dropdown-menu-clickable-item more-item--album';
-            menuItemAnchor2.textContent = 'Go to album in library';
-            albumMenuItem2.appendChild(menuItemAnchor2);
-            const artistMenuItem = menu.querySelector('.more-item--artist').parentNode;
-            menu.insertBefore(albumMenuItem1, artistMenuItem);
-            menu.insertBefore(albumMenuItem2, artistMenuItem);
-        }
-    }
-}
-
-
-/***/ }),
-
-/***/ 252:
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-"use strict";
-
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.enhanceAutomaticEditsPage = enhanceAutomaticEditsPage;
-const tiny_async_pool_1 = __importDefault(__webpack_require__(692));
-const constants_1 = __webpack_require__(921);
-const utils_1 = __webpack_require__(135);
-const toolbarTemplate = document.createElement('template');
-toolbarTemplate.innerHTML = `
-    <div>
-        <button type="button" class="btn-primary" disabled>
-            View All At Once
-        </button>
-        Go to artist: <select></select>
-    </div>`;
-const domParser = new DOMParser();
-const artistMap = new Map();
-let artistSelect = undefined;
-let loadPagesPromise = undefined;
-let loadPagesProgressElement = undefined;
-async function enhanceAutomaticEditsPage(element) {
-    if (!document.URL.includes('/settings/subscription/automatic-edits')) {
-        return;
-    }
-    const section = element.querySelector('#subscription-corrections');
-    const table = section === null || section === void 0 ? void 0 : section.querySelector('table');
-    if (!section || !table) {
-        return;
-    }
-    enhanceTable(table);
-    const paginationList = section.querySelector('.pagination-list');
-    if (!paginationList) {
-        return;
-    }
-    const paginationListItems = [...paginationList.querySelectorAll('.pagination-page')];
-    const currentPageNumber = parseInt(paginationListItems.find(x => x.getAttribute('aria-current') === 'page').textContent, 10);
-    const pageCount = parseInt(paginationListItems[paginationListItems.length - 1].textContent, 10);
-    if (pageCount === 1) {
-        return;
-    }
-    const toolbar = toolbarTemplate.content.firstElementChild.cloneNode(true);
-    section.insertBefore(toolbar, section.firstElementChild);
-    artistSelect = toolbar.querySelector('select');
-    const selectedArtistKey = getSelectedArtistKey();
-    for (const artist of [...artistMap.values()].sort((a, b) => a.sortName.localeCompare(b.sortName))) {
-        const option = document.createElement('option');
-        option.value = artist.key;
-        option.selected = artist.key === selectedArtistKey;
-        option.text = artist.name;
-        const keepNothingSelected = !option.selected && artistSelect.selectedIndex === -1;
-        artistSelect.appendChild(option);
-        if (keepNothingSelected) {
-            artistSelect.selectedIndex = -1;
-        }
-    }
-    artistSelect.addEventListener('change', function () {
-        const selectedArtist = artistMap.get(this.value);
-        const anchor = document.createElement('a');
-        anchor.href = `?page=${selectedArtist.pageNumber}&artist=${(0, utils_1.encodeURIComponent2)(selectedArtist.name)}`;
-        document.body.appendChild(anchor);
-        anchor.click();
-        document.body.removeChild(anchor);
-    });
-    loadPagesProgressElement = document.createElement('span');
-    toolbar.insertAdjacentText('beforeend', ' ');
-    toolbar.insertAdjacentElement('beforeend', loadPagesProgressElement);
-    loadPagesPromise !== null && loadPagesPromise !== void 0 ? loadPagesPromise : (loadPagesPromise = loadPages(table, currentPageNumber, pageCount));
-    const pages = await loadPagesPromise;
-    toolbar.removeChild(loadPagesProgressElement);
-    const viewAllButton = toolbar.querySelector('button');
-    viewAllButton.disabled = false;
-    viewAllButton.addEventListener('click', async () => {
-        if (pages.length >= 100 && !window.confirm(`You are about to view ${pages.length} pages at once. This might take a long time to load. Are you sure?`)) {
-            return;
-        }
-        viewAllButton.disabled = true;
-        table.style.tableLayout = 'fixed';
-        const tableBody = table.tBodies[0];
-        const firstRow = tableBody.rows[0];
-        for (const page of pages) {
-            if (page.pageNumber === currentPageNumber) {
-                continue;
-            }
-            for (const row of page.rows) {
-                enhanceRow(row);
-                if (page.pageNumber < currentPageNumber) {
-                    firstRow.insertAdjacentElement('beforebegin', row);
+                    else {
+                        await delay(1000);
+                    }
+                }
+                else if (delayResolver !== undefined) {
+                    if (response.status === 429) { // Too Many Requests
+                        // retry after 10 seconds, then another 10 seconds, etc. up to 60 seconds, finally retry after every second.
+                        const additionalDelayMs = delayTooManyRequestsMs < 60000 ? 10000 : 1000;
+                        delayTooManyRequestsMs += additionalDelayMs;
+                        await delay(additionalDelayMs);
+                    }
+                    else if (i < 5) {
+                        // retry after 2 seconds, then 4 seconds, then 8, finally 16 (30 seconds total)
+                        await delay(Math.pow(2, i) * 1000);
+                    }
+                    else {
+                        throw (_a = response.statusText) !== null && _a !== void 0 ? _a : response.status.toString();
+                    }
                 }
                 else {
-                    tableBody.appendChild(row);
+                    await delayPromise;
                 }
             }
-            if (page.pageNumber % 10 === 0) {
-                await (0, utils_1.delay)(1);
+        }
+        catch (reason) {
+            if (delayRejecter !== undefined) {
+                delayRejecter(reason);
             }
+            throw reason;
         }
     });
-}
-function enhanceTable(table) {
-    document.body.style.backgroundColor = '#fff';
-    table.style.tableLayout = 'auto';
-    const headerRow = table.tHead.rows[0];
-    const body = table.tBodies[0];
-    let sortedCellIndex = 1;
-    const keys = [
-        'track_name_original',
-        'artist_name_original',
-        'album_name_original',
-        'album_artist_name_original',
-    ];
-    for (let i = 0; i < 4; i++) {
-        const key = keys[i];
-        const cell = headerRow.cells[i];
-        cell.innerHTML = `<a href="javascript:void(0)" role="button">${cell.textContent}</a>`;
-        cell.addEventListener('click', () => {
-            const dir = sortedCellIndex === i ? -1 : 1;
-            sortedCellIndex = sortedCellIndex === i ? -1 : i;
-            const rows = [...body.rows].map(row => {
-                let value = row.dataset[key];
-                if (!value) {
-                    value = row.querySelector(`input[name="${key}"]`).value;
-                    row.dataset[key] = value;
-                }
-                return { row, value };
-            });
-            rows.sort((a, b) => a.value.localeCompare(b.value) * dir);
-            for (const row of rows) {
-                body.appendChild(row.row);
-            }
-        });
-    }
-    for (const row of body.rows) {
-        enhanceRow(row);
-    }
-}
-function enhanceRow(row) {
-    if (row.dataset['enhanced'] === 'true') {
-        return;
-    }
-    row.dataset['enhanced'] = 'true';
-    const formData = getFormData(row);
-    const trackName = formData.get('track_name').toString();
-    const artistName = formData.get('artist_name').toString();
-    const albumName = formData.get('album_name').toString();
-    const albumArtistName = formData.get('album_artist_name').toString();
-    const originalTrackName = formData.get('track_name_original').toString();
-    const originalArtistName = formData.get('artist_name_original').toString();
-    const originalAlbumName = formData.get('album_name_original').toString();
-    const originalAlbumArtistName = formData.get('album_artist_name_original').toString();
-    function emphasize(cell, content) {
-        var _a;
-        cell.style.lineHeight = '1';
-        cell.innerHTML = `
-            <div>
-                <span class="sr-only">
-                    ${cell.textContent}
-                </span>
-                <b>
-                    ${content}
-                </b>
-            </div>
-            <small>
-                Originally "${(_a = cell.textContent) === null || _a === void 0 ? void 0 : _a.trim()}"
-            </small>`;
-    }
-    if (trackName !== originalTrackName) {
-        emphasize(row.cells[0], trackName);
-    }
-    else {
-        // remove bold
-        row.cells[0].innerHTML = row.cells[0].textContent;
-    }
-    if (artistName !== originalArtistName) {
-        emphasize(row.cells[1], artistName);
-    }
-    if (albumName !== originalAlbumName) {
-        emphasize(row.cells[2], albumName);
-    }
-    if (albumArtistName !== originalAlbumArtistName) {
-        emphasize(row.cells[3], albumArtistName);
-    }
-    if (originalArtistName.toLowerCase() === getSelectedArtistKey()) {
-        row.classList.add(`${constants_1.namespace}-highlight`);
-    }
-}
-function getFormData(row) {
-    return new FormData(row.querySelector('form'));
-}
-function getSelectedArtistKey() {
-    var _a;
-    return (_a = new URLSearchParams(location.search).get('artist')) === null || _a === void 0 ? void 0 : _a.toLowerCase();
-}
-async function loadPages(table, currentPageNumber, pageCount) {
-    const currentPage = { pageNumber: currentPageNumber, rows: [...table.tBodies[0].rows] };
-    const pages = [currentPage];
-    const pageNumbersToLoad = [...Array(pageCount).keys()].map(i => i + 1).filter(i => i !== currentPageNumber);
-    addArtistsToSelect(currentPage);
-    updateProgressText(1, pageCount);
-    for await (const page of (0, tiny_async_pool_1.default)(6, pageNumbersToLoad, loadPage)) {
-        pages.push(page);
-        addArtistsToSelect(page);
-        updateProgressText(pages.length, pageCount);
-    }
-    pages.sort((a, b) => a.pageNumber < b.pageNumber ? -1 : 1);
-    return pages;
-}
-async function loadPage(pageNumber) {
-    const response = await (0, utils_1.fetchAndRetry)(`?page=${pageNumber}&_pjax=%23content`, {
-        credentials: 'include',
-        headers: {
-            'X-Pjax': 'true',
-            'X-Pjax-Container': '#content',
-        },
-    });
-    const text = await response.text();
-    const doc = domParser.parseFromString(text, 'text/html');
-    const table = doc.querySelector('.chart-table');
-    return {
-        pageNumber,
-        rows: [...table.tBodies[0].rows],
-    };
-}
-function addArtistsToSelect(page) {
-    const selectedArtistKey = getSelectedArtistKey();
-    for (const row of page.rows) {
-        const formData = getFormData(row);
-        const name = formData.get('artist_name_original').toString();
-        const sortName = name.replace(/\s+/g, '');
-        const key = name.toLowerCase();
-        const artist = artistMap.get(key);
-        if (!artist) {
-            artistMap.set(key, { key, name, sortName, pageNumber: page.pageNumber });
-            const option = document.createElement('option');
-            option.value = key;
-            option.selected = key === selectedArtistKey;
-            option.text = name;
-            const keepNothingSelected = !option.selected && artistSelect.selectedIndex === -1;
-            const insertAtIndex = [...artistMap.values()].sort((a, b) => a.sortName.localeCompare(b.sortName)).findIndex(x => x.key === key);
-            artistSelect.insertBefore(option, artistSelect.children[insertAtIndex]);
-            if (keepNothingSelected) {
-                artistSelect.selectedIndex = -1;
-            }
-        }
-        else if (artist.pageNumber > page.pageNumber) {
-            artist.pageNumber = page.pageNumber;
-        }
-    }
-}
-function updateProgressText(current, total) {
-    loadPagesProgressElement.textContent = `${current} / ${total} (${(current * 100 / total).toFixed(0)}%)`;
 }
 
 
@@ -1505,16 +737,6 @@ async function augmentEditScrobbleForm(scrobbleData) {
     submitButton.addEventListener('click', async (event) => {
         var _a, _b;
         event.preventDefault();
-        for (const element of form.elements) {
-            if (element instanceof HTMLInputElement && element.dataset['confirm'] && element.placeholder !== 'Mixed') {
-                if (confirm(element.dataset['confirm'])) {
-                    delete element.dataset['confirm']; // don't confirm again when resubmitting
-                }
-                else {
-                    return; // stop submit
-                }
-            }
-        }
         const formData = new FormData(form);
         const formDataToSubmit = [];
         const track_name = getMixedInputValue(track_name_input);
@@ -1563,8 +785,17 @@ async function augmentEditScrobbleForm(scrobbleData) {
             }
         }
         if (formDataToSubmit.length === 0) {
-            alert('Your edit doesn\'t contain any real changes.'); // TODO: pretty validation messages
+            alert('Your edit doesn\'t contain any real changes. We cannot accept casing changes.'); // TODO: pretty validation messages
             return;
+        }
+        if (formDataToSubmit.length > 1) {
+            for (const element of form.elements) {
+                if (element instanceof HTMLInputElement && element.dataset['confirm'] && element.placeholder !== 'Mixed') {
+                    if (!confirm(element.dataset['confirm'])) {
+                        return; // stop submit
+                    }
+                }
+            }
         }
         // hide the Edit Scrobble form
         const cancelButton = form.querySelector('button.js-close');
@@ -1673,9 +904,15 @@ function augmentInput(scrobbleData, popup, inputs, originalInput, input, plural)
     }
     else if (input.name === 'album_artist_name') {
         inputs.album_name.addEventListener('input', () => {
+            var _a;
             if (input.value === '' && inputs.album_name.value !== '') {
-                input.value = inputs.artist_name.value;
-                input.placeholder = '';
+                const newValue = ((_a = scrobbleData
+                    .find(x => x.get('album_name') === inputs.album_name.value)) === null || _a === void 0 ? void 0 : _a.get('album_artist_name')) || inputs.artist_name.value;
+                if (newValue) {
+                    input.value = newValue;
+                    input.dispatchEvent(new Event('input'));
+                    return;
+                }
             }
             refreshFormGroupState();
         });
@@ -1724,225 +961,411 @@ function cloneFormData(formData) {
 
 /***/ }),
 
-/***/ 694:
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+/***/ 252:
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
 
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.LoadingModal = void 0;
+exports.enhanceAutomaticEditsPage = enhanceAutomaticEditsPage;
+const tiny_async_pool_1 = __importDefault(__webpack_require__(692));
 const constants_1 = __webpack_require__(921);
-const Modal_1 = __webpack_require__(946);
-class LoadingModal extends Modal_1.Modal {
-    constructor(title, options) {
-        const body = `
-            <div class="${constants_1.namespace}-loading">
-                <div class="${constants_1.namespace}-progress"></div>
-            </div>`;
-        super(title, body, options);
-        this.completed = false;
-        this.steps = [];
-        this.weight = 0;
-        this.progress = this.element.querySelector(`.${constants_1.namespace}-progress`);
+const utils_1 = __webpack_require__(135);
+const toolbarTemplate = document.createElement('template');
+toolbarTemplate.innerHTML = `
+    <div>
+        <button type="button" class="btn-primary" disabled>
+            View All At Once
+        </button>
+        Go to album artist: <select></select>
+    </div>`;
+const domParser = new DOMParser();
+const artistMap = new Map();
+let artistSelect = undefined;
+let scrollArtistIntoView = false;
+let loadPagesPromise = undefined;
+let loadPagesProgressElement = undefined;
+async function enhanceAutomaticEditsPage(element) {
+    if (!document.URL.includes('/settings/subscription/automatic-edits')) {
+        return;
     }
-    refreshProgress() {
-        switch (this.options && this.options.display) {
-            case 'count':
-                this.progress.textContent = `${this.steps.filter((s) => s.completed).length} / ${this.steps.length}`;
-                break;
-            case 'percentage':
-                this.progress.textContent = Math.floor(getCompletionRatio(this.steps) * 100) + '%';
-                break;
+    const section = element.querySelector('#subscription-corrections');
+    const table = section === null || section === void 0 ? void 0 : section.querySelector('table');
+    if (!section || !table) {
+        return;
+    }
+    enhanceTable(table);
+    const paginationList = section.querySelector('.pagination-list');
+    if (!paginationList) {
+        return;
+    }
+    const paginationListItems = [...paginationList.querySelectorAll('.pagination-page')];
+    const currentPageNumber = parseInt(paginationListItems.find(x => x.getAttribute('aria-current') === 'page').textContent, 10);
+    const pageCount = parseInt(paginationListItems[paginationListItems.length - 1].textContent, 10);
+    if (pageCount === 1) {
+        return;
+    }
+    const toolbar = toolbarTemplate.content.firstElementChild.cloneNode(true);
+    section.insertBefore(toolbar, section.firstElementChild);
+    artistSelect = toolbar.querySelector('select');
+    const selectedArtistKey = getSelectedArtistKey();
+    for (const artist of [...artistMap.values()].sort((a, b) => a.sortName.localeCompare(b.sortName))) {
+        const option = document.createElement('option');
+        option.value = artist.key;
+        option.selected = artist.key === selectedArtistKey;
+        option.text = artist.name;
+        const keepNothingSelected = !option.selected && artistSelect.selectedIndex === -1;
+        artistSelect.appendChild(option);
+        if (keepNothingSelected) {
+            artistSelect.selectedIndex = -1;
+        }
+    }
+    artistSelect.addEventListener('change', function () {
+        const selectedArtist = artistMap.get(this.value);
+        const anchor = document.createElement('a');
+        anchor.href = `?page=${selectedArtist.pageNumber}&album-artist=${(0, utils_1.encodeURIComponent2)(selectedArtist.name)}`;
+        document.body.appendChild(anchor);
+        scrollArtistIntoView = true;
+        anchor.click();
+        document.body.removeChild(anchor);
+    });
+    loadPagesProgressElement = document.createElement('span');
+    toolbar.insertAdjacentText('beforeend', ' ');
+    toolbar.insertAdjacentElement('beforeend', loadPagesProgressElement);
+    loadPagesPromise !== null && loadPagesPromise !== void 0 ? loadPagesPromise : (loadPagesPromise = loadPages(table, currentPageNumber, pageCount));
+    const pages = await loadPagesPromise;
+    toolbar.removeChild(loadPagesProgressElement);
+    const viewAllButton = toolbar.querySelector('button');
+    viewAllButton.disabled = false;
+    viewAllButton.addEventListener('click', async () => {
+        if (pages.length >= 10 && !window.confirm(`You are about to view ${pages.length} pages at once. This might take a long time to load. Are you sure?`)) {
+            return;
+        }
+        viewAllButton.disabled = true;
+        table.style.tableLayout = 'fixed';
+        const tableBody = table.tBodies[0];
+        const firstRow = tableBody.rows[0];
+        for (const page of pages) {
+            if (page.pageNumber === currentPageNumber) {
+                continue;
+            }
+            for (const row of page.rows) {
+                enhanceRow(row);
+                if (page.pageNumber < currentPageNumber) {
+                    firstRow.insertAdjacentElement('beforebegin', row);
+                }
+                else {
+                    tableBody.appendChild(row);
+                }
+            }
+            if (page.pageNumber % 10 === 0) {
+                await (0, utils_1.delay)(1);
+            }
+        }
+    });
+}
+function enhanceTable(table) {
+    document.body.style.backgroundColor = '#fff';
+    table.style.tableLayout = 'auto';
+    const headerRow = table.tHead.rows[0];
+    const body = table.tBodies[0];
+    let sortedCellIndex = 1;
+    const keys = [
+        'track_name_original',
+        'artist_name_original',
+        'album_name_original',
+        'album_artist_name_original',
+    ];
+    for (let i = 0; i < 4; i++) {
+        const key = keys[i];
+        const cell = headerRow.cells[i];
+        cell.innerHTML = `<a href="javascript:void(0)" role="button">${cell.textContent}</a>`;
+        cell.addEventListener('click', () => {
+            const dir = sortedCellIndex === i ? -1 : 1;
+            sortedCellIndex = sortedCellIndex === i ? -1 : i;
+            const rows = [...body.rows].map(row => {
+                let value = row.dataset[key];
+                if (!value) {
+                    value = row.querySelector(`input[name="${key}"]`).value;
+                    row.dataset[key] = value;
+                }
+                return { row, value };
+            });
+            rows.sort((a, b) => a.value.localeCompare(b.value) * dir);
+            for (const row of rows) {
+                body.appendChild(row.row);
+            }
+        });
+    }
+    for (const row of body.rows) {
+        enhanceRow(row);
+    }
+}
+function enhanceRow(row) {
+    if (row.dataset['enhanced'] === 'true') {
+        return;
+    }
+    row.dataset['enhanced'] = 'true';
+    const formData = getFormData(row);
+    const trackName = formData.get('track_name').toString();
+    const artistName = formData.get('artist_name').toString();
+    const albumName = formData.get('album_name').toString();
+    const albumArtistName = formData.get('album_artist_name').toString();
+    const originalTrackName = formData.get('track_name_original').toString();
+    const originalArtistName = formData.get('artist_name_original').toString();
+    const originalAlbumName = formData.get('album_name_original').toString();
+    const originalAlbumArtistName = formData.get('album_artist_name_original').toString();
+    function emphasize(cell, content) {
+        var _a;
+        cell.style.lineHeight = '1';
+        cell.innerHTML = `
+            <div>
+                <span class="sr-only">
+                    ${cell.textContent}
+                </span>
+                <b>
+                    ${content}
+                </b>
+            </div>
+            <small>
+                Originally "${(_a = cell.textContent) === null || _a === void 0 ? void 0 : _a.trim()}"
+            </small>`;
+    }
+    if (trackName !== originalTrackName) {
+        emphasize(row.cells[0], trackName);
+    }
+    else {
+        // remove bold
+        row.cells[0].innerHTML = row.cells[0].textContent;
+    }
+    if (artistName !== originalArtistName) {
+        emphasize(row.cells[1], artistName);
+    }
+    if (albumName !== originalAlbumName) {
+        emphasize(row.cells[2], albumName);
+    }
+    if (albumArtistName !== originalAlbumArtistName) {
+        emphasize(row.cells[3], albumArtistName);
+    }
+    if (originalAlbumArtistName.toLowerCase() === getSelectedArtistKey()) {
+        row.classList.add(`${constants_1.namespace}-highlight`);
+        if (scrollArtistIntoView) {
+            scrollArtistIntoView = false;
+            row.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }
 }
-exports.LoadingModal = LoadingModal;
-// calculates the completion ratio from a tree of steps with weights and child steps
-function getCompletionRatio(steps) {
-    const totalWeight = steps.map((s) => s.weight).reduce((a, b) => a + b, 0);
-    if (totalWeight === 0)
-        return 0;
-    const completedWeight = steps.map((s) => s.weight * (s.completed ? 1 : getCompletionRatio(s.steps))).reduce((a, b) => a + b, 0);
-    return completedWeight / totalWeight;
+function getFormData(row) {
+    return new FormData(row.querySelector('form'));
+}
+function getSelectedArtistKey() {
+    var _a;
+    return (_a = new URLSearchParams(location.search).get('album-artist')) === null || _a === void 0 ? void 0 : _a.toLowerCase();
+}
+async function loadPages(table, currentPageNumber, pageCount) {
+    const currentPage = { pageNumber: currentPageNumber, rows: [...table.tBodies[0].rows] };
+    const pages = [currentPage];
+    const pageNumbersToLoad = [...Array(pageCount).keys()].map(i => i + 1).filter(i => i !== currentPageNumber);
+    addArtistsToSelect(currentPage);
+    updateProgressText(1, pageCount);
+    for await (const page of (0, tiny_async_pool_1.default)(6, pageNumbersToLoad, loadPage)) {
+        pages.push(page);
+        addArtistsToSelect(page);
+        updateProgressText(pages.length, pageCount);
+    }
+    pages.sort((a, b) => a.pageNumber < b.pageNumber ? -1 : 1);
+    return pages;
+}
+async function loadPage(pageNumber) {
+    const response = await (0, utils_1.fetchAndRetry)(`?page=${pageNumber}&_pjax=%23content`, {
+        credentials: 'include',
+        headers: {
+            'X-Pjax': 'true',
+            'X-Pjax-Container': '#content',
+        },
+    });
+    const text = await response.text();
+    const doc = domParser.parseFromString(text, 'text/html');
+    const table = doc.querySelector('.chart-table');
+    return {
+        pageNumber,
+        rows: [...table.tBodies[0].rows],
+    };
+}
+function addArtistsToSelect(page) {
+    const selectedArtistKey = getSelectedArtistKey();
+    for (const row of page.rows) {
+        const formData = getFormData(row);
+        const name = formData.get('album_artist_name_original').toString();
+        const sortName = name.replace(/\s+/g, '');
+        const key = name.toLowerCase();
+        const artist = artistMap.get(key);
+        if (!artist) {
+            artistMap.set(key, { key, name, sortName, pageNumber: page.pageNumber });
+            const option = document.createElement('option');
+            option.value = key;
+            option.selected = key === selectedArtistKey;
+            option.text = name;
+            const keepNothingSelected = !option.selected && artistSelect.selectedIndex === -1;
+            const insertAtIndex = [...artistMap.values()].sort((a, b) => a.sortName.localeCompare(b.sortName)).findIndex(x => x.key === key);
+            artistSelect.insertBefore(option, artistSelect.children[insertAtIndex]);
+            if (keepNothingSelected) {
+                artistSelect.selectedIndex = -1;
+            }
+        }
+        else if (artist.pageNumber > page.pageNumber) {
+            artist.pageNumber = page.pageNumber;
+        }
+    }
+}
+function updateProgressText(current, total) {
+    loadPagesProgressElement.textContent = `${current} / ${total} (${(current * 100 / total).toFixed(0)}%)`;
 }
 
 
 /***/ }),
 
-/***/ 946:
+/***/ 308:
 /***/ ((__unused_webpack_module, exports) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.Modal = void 0;
-class Modal {
-    constructor(title, body, options) {
-        this.addedClass = false;
-        this.element = document.createElement('div');
-        this.options = options;
-        const fragment = modalTemplate.content.cloneNode(true);
-        const modalTitle = fragment.querySelector('.modal-title');
-        if (title instanceof Element) {
-            modalTitle.insertAdjacentElement('beforeend', title);
+exports.displayAlbumName = displayAlbumName;
+async function displayAlbumName(element) {
+    var _a, _b;
+    const rows = element instanceof HTMLTableRowElement ? [element] : element.querySelectorAll('tr');
+    if (rows.length === 0) {
+        return;
+    }
+    const baseHref = (_a = document.querySelector('.secondary-nav-item--overview a')) === null || _a === void 0 ? void 0 : _a.getAttribute('href');
+    for (const row of rows) {
+        // Ignore non-chartlist rows.
+        if (!row.matches('.chartlist-row[data-edit-scrobble-id]')) {
+            continue;
+        }
+        // Ignore non-chartlist tables and tables with an index.
+        const table = row.closest('table');
+        if (table === null || !table.matches('.chartlist:not(.chartlist--with-index)')) {
+            continue;
+        }
+        // Ignore rows without a cover art image or cover art placeholder.
+        const coverArtAnchor = row.querySelector('.cover-art');
+        if (coverArtAnchor === null) {
+            continue;
+        }
+        // Extract album link and name from cover art and scrobble edit form.
+        const albumHref = coverArtAnchor.getAttribute('href');
+        const form = row.querySelector('form[data-edit-scrobble]:not([data-bulk-edit-scrobbles])');
+        let albumName;
+        if (form !== null) {
+            const formData = new FormData(form);
+            albumName = (_b = formData.get('album_name')) === null || _b === void 0 ? void 0 : _b.toString();
         }
         else {
-            modalTitle.insertAdjacentHTML('beforeend', title);
+            albumName = coverArtAnchor.querySelector('img').alt;
         }
-        const modalBody = fragment.querySelector('.modal-body');
-        if (body instanceof Element) {
-            modalBody.insertAdjacentElement('beforeend', body);
+        // Create and insert th element.
+        if (!table.classList.contains('lastfm-bulk-edit-chartlist-scrobbles')) {
+            table.classList.add('lastfm-bulk-edit-chartlist-scrobbles');
+            const albumHeaderCell = document.createElement('th');
+            albumHeaderCell.textContent = 'Album';
+            const headerRow = table.tHead.rows[0];
+            headerRow.insertBefore(albumHeaderCell, headerRow.children[4]);
+        }
+        // Create and insert td element.
+        const albumCell = document.createElement('td');
+        albumCell.className = 'chartlist-album';
+        if (albumHref && albumName) {
+            const albumAnchor = document.createElement('a');
+            albumAnchor.href = albumHref;
+            albumAnchor.title = albumName;
+            albumAnchor.textContent = albumName;
+            albumCell.appendChild(albumAnchor);
         }
         else {
-            modalBody.insertAdjacentHTML('beforeend', body);
+            const noAlbumText = document.createElement('em');
+            noAlbumText.className = 'lastfm-bulk-edit-text-danger';
+            noAlbumText.textContent = 'No Album';
+            albumCell.appendChild(noAlbumText);
         }
-        if (options && options.dismissible) {
-            // create X button that closes the modal
-            const closeButton = document.createElement('button');
-            closeButton.className = 'modal-dismiss sr-only';
-            closeButton.textContent = 'Close';
-            closeButton.addEventListener('click', () => this.hide());
-            // create modal actions div
-            const modalActions = document.createElement('div');
-            modalActions.className = 'modal-actions';
-            modalActions.appendChild(closeButton);
-            // append modal actions to modal content
-            const modalContent = fragment.querySelector('.modal-content');
-            modalContent.insertBefore(modalActions, modalContent.firstElementChild);
-            // close modal when user clicks outside modal
-            const popupWrapper = fragment.querySelector('.popup_wrapper');
-            popupWrapper.addEventListener('click', (event) => {
-                if (event.target instanceof Node && !modalContent.contains(event.target)) {
-                    this.hide();
-                }
-            });
-        }
-        this.element.appendChild(fragment);
-    }
-    get isAttached() {
-        return !!this.element.parentNode;
-    }
-    show() {
-        if (this.element.parentNode)
-            return;
-        document.body.appendChild(this.element);
-        if (!document.documentElement.classList.contains('popup_visible')) {
-            document.documentElement.classList.add('popup_visible');
-            this.addedClass = true;
-        }
-    }
-    hide() {
-        if (!this.element.parentNode)
-            return;
-        this.element.parentNode.removeChild(this.element);
-        if (this.addedClass) {
-            document.documentElement.classList.remove('popup_visible');
-            this.addedClass = false;
-        }
-        if (this.options && this.options.events && this.options.events.hide) {
-            this.options.events.hide();
+        const nameCell = row.querySelector('.chartlist-name');
+        row.insertBefore(albumCell, nameCell.nextElementSibling);
+        // Add menu items.
+        if (albumHref && albumName) {
+            const menu = row.querySelector('.chartlist-more-menu');
+            const albumMenuItem1 = document.createElement('li');
+            const menuItemAnchor1 = document.createElement('a');
+            menuItemAnchor1.href = albumHref;
+            menuItemAnchor1.className = 'dropdown-menu-clickable-item more-item--album';
+            menuItemAnchor1.textContent = 'Go to album';
+            albumMenuItem1.appendChild(menuItemAnchor1);
+            const albumMenuItem2 = document.createElement('li');
+            const menuItemAnchor2 = document.createElement('a');
+            menuItemAnchor2.href = baseHref + '/library' + albumHref;
+            menuItemAnchor2.className = 'dropdown-menu-clickable-item more-item--album';
+            menuItemAnchor2.textContent = 'Go to album in library';
+            albumMenuItem2.appendChild(menuItemAnchor2);
+            const artistMenuItem = menu.querySelector('.more-item--artist').parentNode;
+            menu.insertBefore(albumMenuItem1, artistMenuItem);
+            menu.insertBefore(albumMenuItem2, artistMenuItem);
         }
     }
 }
-exports.Modal = Modal;
-const modalTemplate = document.createElement('template');
-modalTemplate.innerHTML = `
-    <div class="popup_background"
-        style="opacity: 0.8; visibility: visible; background-color: rgb(0, 0, 0); position: fixed; top: 0px; right: 0px; bottom: 0px; left: 0px;">
-    </div>
-    <div class="popup_wrapper popup_wrapper_visible" style="opacity: 1; visibility: visible; position: fixed; overflow: auto; width: 100%; height: 100%; top: 0px; left: 0px; text-align: center;">
-        <div class="modal-dialog popup_content" role="dialog" aria-labelledby="modal-label" data-popup-initialized="true" aria-hidden="false" style="opacity: 1; visibility: visible; pointer-events: auto; display: inline-block; outline: none; text-align: left; position: relative; vertical-align: middle;" tabindex="-1">
-            <div class="modal-content">
-                <div class="modal-body">
-                    <h2 class="modal-title"></h2>
-                </div>
-            </div>
-        </div>
-        <div class="popup_align" style="display: inline-block; vertical-align: middle; height: 100%;"></div>
-    </div>`;
 
 
 /***/ }),
 
-/***/ 135:
+/***/ 406:
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.delay = delay;
-exports.encodeURIComponent2 = encodeURIComponent2;
-exports.fetchAndRetry = fetchAndRetry;
-const async_mutex_1 = __webpack_require__(693);
-function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-function encodeURIComponent2(uriComponent) {
-    return encodeURIComponent(uriComponent).replace(/%20/g, '+');
-}
-const semaphore = new async_mutex_1.Semaphore(6);
-let delayPromise = undefined;
-let delayTooManyRequestsMs = 10000;
-async function fetchAndRetry(url, init, callback) {
-    callback !== null && callback !== void 0 ? callback : (callback = async (response) => response);
-    return await semaphore.runExclusive(async () => {
-        var _a;
-        let delayResolver;
-        let delayRejecter;
-        try {
-            // eslint-disable-next-line no-constant-condition
-            for (let i = 0; true; i++) {
-                const response = await fetch(url, init);
-                if (response.ok) {
-                    const result = await callback(response, i);
-                    if (result !== undefined) {
-                        if (delayResolver !== undefined) {
-                            delayPromise = undefined;
-                            delayResolver();
-                        }
-                        return result;
-                    }
+var tslib_1 = __webpack_require__(635);
+var Semaphore_1 = __webpack_require__(919);
+var Mutex = /** @class */ (function () {
+    function Mutex(cancelError) {
+        this._semaphore = new Semaphore_1.default(1, cancelError);
+    }
+    Mutex.prototype.acquire = function () {
+        return tslib_1.__awaiter(this, arguments, void 0, function (priority) {
+            var _a, releaser;
+            if (priority === void 0) { priority = 0; }
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0: return [4 /*yield*/, this._semaphore.acquire(1, priority)];
+                    case 1:
+                        _a = _b.sent(), releaser = _a[1];
+                        return [2 /*return*/, releaser];
                 }
-                if (delayPromise === undefined) {
-                    delayPromise = new Promise((resolve, reject) => {
-                        delayResolver = resolve;
-                        delayRejecter = reject;
-                    });
-                    if (response.status === 429) { // Too Many Requests
-                        await delay(delayTooManyRequestsMs);
-                    }
-                    else {
-                        await delay(1000);
-                    }
-                }
-                else if (delayResolver !== undefined) {
-                    if (response.status === 429) { // Too Many Requests
-                        // retry after 10 seconds, then another 10 seconds, etc. up to 60 seconds, finally retry after every second.
-                        const additionalDelayMs = delayTooManyRequestsMs < 60000 ? 10000 : 1000;
-                        delayTooManyRequestsMs += additionalDelayMs;
-                        await delay(additionalDelayMs);
-                    }
-                    else if (i < 5) {
-                        // retry after 2 seconds, then 4 seconds, then 8, finally 16 (30 seconds total)
-                        await delay(Math.pow(2, i) * 1000);
-                    }
-                    else {
-                        throw (_a = response.statusText) !== null && _a !== void 0 ? _a : response.status.toString();
-                    }
-                }
-                else {
-                    await delayPromise;
-                }
-            }
-        }
-        catch (reason) {
-            if (delayRejecter !== undefined) {
-                delayRejecter(reason);
-            }
-            throw reason;
-        }
-    });
-}
+            });
+        });
+    };
+    Mutex.prototype.runExclusive = function (callback, priority) {
+        if (priority === void 0) { priority = 0; }
+        return this._semaphore.runExclusive(function () { return callback(); }, 1, priority);
+    };
+    Mutex.prototype.isLocked = function () {
+        return this._semaphore.isLocked();
+    };
+    Mutex.prototype.waitForUnlock = function (priority) {
+        if (priority === void 0) { priority = 0; }
+        return this._semaphore.waitForUnlock(1, priority);
+    };
+    Mutex.prototype.release = function () {
+        if (this._semaphore.isLocked())
+            this._semaphore.release();
+    };
+    Mutex.prototype.cancel = function () {
+        return this._semaphore.cancel();
+    };
+    return Mutex;
+}());
+exports["default"] = Mutex;
 
 
 /***/ }),
@@ -1955,7 +1378,21 @@ module.exports = he;
 
 /***/ }),
 
-/***/ 653:
+/***/ 586:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.E_CANCELED = exports.E_ALREADY_LOCKED = exports.E_TIMEOUT = void 0;
+exports.E_TIMEOUT = new Error('timeout while waiting for mutex to become available');
+exports.E_ALREADY_LOCKED = new Error('mutex already locked');
+exports.E_CANCELED = new Error('request for lock canceled');
+
+
+/***/ }),
+
+/***/ 635:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -1986,6 +1423,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   __propKey: () => (/* binding */ __propKey),
 /* harmony export */   __read: () => (/* binding */ __read),
 /* harmony export */   __rest: () => (/* binding */ __rest),
+/* harmony export */   __rewriteRelativeImportExtension: () => (/* binding */ __rewriteRelativeImportExtension),
 /* harmony export */   __runInitializers: () => (/* binding */ __runInitializers),
 /* harmony export */   __setFunctionName: () => (/* binding */ __setFunctionName),
 /* harmony export */   __spread: () => (/* binding */ __spread),
@@ -2008,7 +1446,7 @@ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 ***************************************************************************** */
-/* global Reflect, Promise, SuppressedError, Symbol */
+/* global Reflect, Promise, SuppressedError, Symbol, Iterator */
 
 var extendStatics = function(d, b) {
   extendStatics = Object.setPrototypeOf ||
@@ -2119,8 +1557,8 @@ function __awaiter(thisArg, _arguments, P, generator) {
 }
 
 function __generator(thisArg, body) {
-  var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
-  return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+  var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
+  return g.next = verb(0), g["throw"] = verb(1), g["return"] = verb(2), typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
   function verb(n) { return function (v) { return step([n, v]); }; }
   function step(op) {
       if (f) throw new TypeError("Generator is already executing.");
@@ -2224,7 +1662,7 @@ function __await(v) {
 function __asyncGenerator(thisArg, _arguments, generator) {
   if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
   var g = generator.apply(thisArg, _arguments || []), i, q = [];
-  return i = {}, verb("next"), verb("throw"), verb("return", awaitReturn), i[Symbol.asyncIterator] = function () { return this; }, i;
+  return i = Object.create((typeof AsyncIterator === "function" ? AsyncIterator : Object).prototype), verb("next"), verb("throw"), verb("return", awaitReturn), i[Symbol.asyncIterator] = function () { return this; }, i;
   function awaitReturn(f) { return function (v) { return Promise.resolve(v).then(f, reject); }; }
   function verb(n, f) { if (g[n]) { i[n] = function (v) { return new Promise(function (a, b) { q.push([n, v, a, b]) > 1 || resume(n, v); }); }; if (f) i[n] = f(i[n]); } }
   function resume(n, v) { try { step(g[n](v)); } catch (e) { settle(q[0][3], e); } }
@@ -2259,10 +1697,19 @@ var __setModuleDefault = Object.create ? (function(o, v) {
   o["default"] = v;
 };
 
+var ownKeys = function(o) {
+  ownKeys = Object.getOwnPropertyNames || function (o) {
+    var ar = [];
+    for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+    return ar;
+  };
+  return ownKeys(o);
+};
+
 function __importStar(mod) {
   if (mod && mod.__esModule) return mod;
   var result = {};
-  if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+  if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
   __setModuleDefault(result, mod);
   return result;
 }
@@ -2322,20 +1769,34 @@ function __disposeResources(env) {
     env.error = env.hasError ? new _SuppressedError(e, env.error, "An error was suppressed during disposal.") : e;
     env.hasError = true;
   }
+  var r, s = 0;
   function next() {
-    while (env.stack.length) {
-      var rec = env.stack.pop();
+    while (r = env.stack.pop()) {
       try {
-        var result = rec.dispose && rec.dispose.call(rec.value);
-        if (rec.async) return Promise.resolve(result).then(next, function(e) { fail(e); return next(); });
+        if (!r.async && s === 1) return s = 0, env.stack.push(r), Promise.resolve().then(next);
+        if (r.dispose) {
+          var result = r.dispose.call(r.value);
+          if (r.async) return s |= 2, Promise.resolve(result).then(next, function(e) { fail(e); return next(); });
+        }
+        else s |= 1;
       }
       catch (e) {
-          fail(e);
+        fail(e);
       }
     }
+    if (s === 1) return env.hasError ? Promise.reject(env.error) : Promise.resolve();
     if (env.hasError) throw env.error;
   }
   return next();
+}
+
+function __rewriteRelativeImportExtension(path, preserveJsx) {
+  if (typeof path === "string" && /^\.\.?\//.test(path)) {
+      return path.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function (m, tsx, d, ext, cm) {
+          return tsx ? preserveJsx ? ".jsx" : ".js" : d && (!ext || !cm) ? m : (d + ext + "." + cm.toLowerCase() + "js");
+      });
+  }
+  return path;
 }
 
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
@@ -2344,6 +1805,10 @@ function __disposeResources(env) {
   __rest,
   __decorate,
   __param,
+  __esDecorate,
+  __runInitializers,
+  __propKey,
+  __setFunctionName,
   __metadata,
   __awaiter,
   __generator,
@@ -2366,7 +1831,582 @@ function __disposeResources(env) {
   __classPrivateFieldIn,
   __addDisposableResource,
   __disposeResources,
+  __rewriteRelativeImportExtension,
 });
+
+
+/***/ }),
+
+/***/ 641:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.createTimestampLinks = createTimestampLinks;
+async function createTimestampLinks(element) {
+    var _a;
+    const libraryHref = (_a = document.querySelector('.secondary-nav-item--library a')) === null || _a === void 0 ? void 0 : _a.href;
+    if (!libraryHref) {
+        return;
+    }
+    const cells = element.querySelectorAll('.chartlist-timestamp');
+    for (const cell of cells) {
+        const span = cell.querySelector('span[title]');
+        if (span === null || span.parentNode !== cell) {
+            continue;
+        }
+        let date;
+        if (cell.classList.contains('chartlist-timestamp--lang-en')) {
+            date = new Date(Date.parse(span.title.split(',')[0]));
+        }
+        else {
+            // Languages other than English are not supported.
+            continue;
+        }
+        const dateString = getDateString(date);
+        const link = document.createElement('a');
+        link.href = `${libraryHref}?from=${dateString}&to=${dateString}`;
+        cell.insertBefore(link, span);
+        link.appendChild(span);
+    }
+}
+function getDateString(date) {
+    let s = date.getFullYear() + '-';
+    const month = date.getMonth() + 1;
+    if (month < 10)
+        s += '0';
+    s += month + '-';
+    const day = date.getDate();
+    if (day < 10)
+        s += '0';
+    s += day;
+    return s;
+}
+
+
+/***/ }),
+
+/***/ 646:
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.withTimeout = void 0;
+var tslib_1 = __webpack_require__(635);
+/* eslint-disable @typescript-eslint/no-explicit-any */
+var errors_1 = __webpack_require__(586);
+function withTimeout(sync, timeout, timeoutError) {
+    var _this = this;
+    if (timeoutError === void 0) { timeoutError = errors_1.E_TIMEOUT; }
+    return {
+        acquire: function (weightOrPriority, priority) {
+            var weight;
+            if (isSemaphore(sync)) {
+                weight = weightOrPriority;
+            }
+            else {
+                weight = undefined;
+                priority = weightOrPriority;
+            }
+            if (weight !== undefined && weight <= 0) {
+                throw new Error("invalid weight ".concat(weight, ": must be positive"));
+            }
+            return new Promise(function (resolve, reject) { return tslib_1.__awaiter(_this, void 0, void 0, function () {
+                var isTimeout, handle, ticket, release, e_1;
+                return tslib_1.__generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            isTimeout = false;
+                            handle = setTimeout(function () {
+                                isTimeout = true;
+                                reject(timeoutError);
+                            }, timeout);
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 3, , 4]);
+                            return [4 /*yield*/, (isSemaphore(sync)
+                                    ? sync.acquire(weight, priority)
+                                    : sync.acquire(priority))];
+                        case 2:
+                            ticket = _a.sent();
+                            if (isTimeout) {
+                                release = Array.isArray(ticket) ? ticket[1] : ticket;
+                                release();
+                            }
+                            else {
+                                clearTimeout(handle);
+                                resolve(ticket);
+                            }
+                            return [3 /*break*/, 4];
+                        case 3:
+                            e_1 = _a.sent();
+                            if (!isTimeout) {
+                                clearTimeout(handle);
+                                reject(e_1);
+                            }
+                            return [3 /*break*/, 4];
+                        case 4: return [2 /*return*/];
+                    }
+                });
+            }); });
+        },
+        runExclusive: function (callback, weight, priority) {
+            return tslib_1.__awaiter(this, void 0, void 0, function () {
+                var release, ticket;
+                return tslib_1.__generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            release = function () { return undefined; };
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, , 7, 8]);
+                            return [4 /*yield*/, this.acquire(weight, priority)];
+                        case 2:
+                            ticket = _a.sent();
+                            if (!Array.isArray(ticket)) return [3 /*break*/, 4];
+                            release = ticket[1];
+                            return [4 /*yield*/, callback(ticket[0])];
+                        case 3: return [2 /*return*/, _a.sent()];
+                        case 4:
+                            release = ticket;
+                            return [4 /*yield*/, callback()];
+                        case 5: return [2 /*return*/, _a.sent()];
+                        case 6: return [3 /*break*/, 8];
+                        case 7:
+                            release();
+                            return [7 /*endfinally*/];
+                        case 8: return [2 /*return*/];
+                    }
+                });
+            });
+        },
+        release: function (weight) {
+            sync.release(weight);
+        },
+        cancel: function () {
+            return sync.cancel();
+        },
+        waitForUnlock: function (weightOrPriority, priority) {
+            var weight;
+            if (isSemaphore(sync)) {
+                weight = weightOrPriority;
+            }
+            else {
+                weight = undefined;
+                priority = weightOrPriority;
+            }
+            if (weight !== undefined && weight <= 0) {
+                throw new Error("invalid weight ".concat(weight, ": must be positive"));
+            }
+            return new Promise(function (resolve, reject) {
+                var handle = setTimeout(function () { return reject(timeoutError); }, timeout);
+                (isSemaphore(sync)
+                    ? sync.waitForUnlock(weight, priority)
+                    : sync.waitForUnlock(priority)).then(function () {
+                    clearTimeout(handle);
+                    resolve();
+                });
+            });
+        },
+        isLocked: function () { return sync.isLocked(); },
+        getValue: function () { return sync.getValue(); },
+        setValue: function (value) { return sync.setValue(value); },
+    };
+}
+exports.withTimeout = withTimeout;
+function isSemaphore(sync) {
+    return sync.getValue !== undefined;
+}
+
+
+/***/ }),
+
+/***/ 692:
+/***/ ((module) => {
+
+async function* asyncPool(concurrency, iterable, iteratorFn) {
+  const executing = new Set();
+  async function consume() {
+    const [promise, value] = await Promise.race(executing);
+    executing.delete(promise);
+    return value;
+  }
+  for (const item of iterable) {
+    // Wrap iteratorFn() in an async fn to ensure we get a promise.
+    // Then expose such promise, so it's possible to later reference and
+    // remove it from the executing pool.
+    const promise = (async () => await iteratorFn(item, iterable))().then(
+      value => [promise, value]
+    );
+    executing.add(promise);
+    if (executing.size >= concurrency) {
+      yield await consume();
+    }
+  }
+  while (executing.size) {
+    yield await consume();
+  }
+}
+
+module.exports = asyncPool;
+
+
+/***/ }),
+
+/***/ 693:
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.tryAcquire = exports.withTimeout = exports.Semaphore = exports.Mutex = void 0;
+var tslib_1 = __webpack_require__(635);
+var Mutex_1 = __webpack_require__(406);
+Object.defineProperty(exports, "Mutex", ({ enumerable: true, get: function () { return Mutex_1.default; } }));
+var Semaphore_1 = __webpack_require__(919);
+Object.defineProperty(exports, "Semaphore", ({ enumerable: true, get: function () { return Semaphore_1.default; } }));
+var withTimeout_1 = __webpack_require__(646);
+Object.defineProperty(exports, "withTimeout", ({ enumerable: true, get: function () { return withTimeout_1.withTimeout; } }));
+var tryAcquire_1 = __webpack_require__(746);
+Object.defineProperty(exports, "tryAcquire", ({ enumerable: true, get: function () { return tryAcquire_1.tryAcquire; } }));
+tslib_1.__exportStar(__webpack_require__(586), exports);
+
+
+/***/ }),
+
+/***/ 694:
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.LoadingModal = void 0;
+const constants_1 = __webpack_require__(921);
+const Modal_1 = __webpack_require__(946);
+class LoadingModal extends Modal_1.Modal {
+    constructor(title, options) {
+        const body = `
+            <div class="${constants_1.namespace}-loading">
+                <div class="${constants_1.namespace}-progress"></div>
+            </div>`;
+        super(title, body, options);
+        this.completed = false;
+        this.steps = [];
+        this.weight = 0;
+        this.progress = this.element.querySelector(`.${constants_1.namespace}-progress`);
+    }
+    refreshProgress() {
+        switch (this.options && this.options.display) {
+            case 'count':
+                this.progress.textContent = `${this.steps.filter((s) => s.completed).length} / ${this.steps.length}`;
+                break;
+            case 'percentage':
+                this.progress.textContent = Math.floor(getCompletionRatio(this.steps) * 100) + '%';
+                break;
+        }
+    }
+}
+exports.LoadingModal = LoadingModal;
+// calculates the completion ratio from a tree of steps with weights and child steps
+function getCompletionRatio(steps) {
+    const totalWeight = steps.map((s) => s.weight).reduce((a, b) => a + b, 0);
+    if (totalWeight === 0)
+        return 0;
+    const completedWeight = steps.map((s) => s.weight * (s.completed ? 1 : getCompletionRatio(s.steps))).reduce((a, b) => a + b, 0);
+    return completedWeight / totalWeight;
+}
+
+
+/***/ }),
+
+/***/ 746:
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.tryAcquire = void 0;
+var errors_1 = __webpack_require__(586);
+var withTimeout_1 = __webpack_require__(646);
+// eslint-disable-next-lisne @typescript-eslint/explicit-module-boundary-types
+function tryAcquire(sync, alreadyAcquiredError) {
+    if (alreadyAcquiredError === void 0) { alreadyAcquiredError = errors_1.E_ALREADY_LOCKED; }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (0, withTimeout_1.withTimeout)(sync, 0, alreadyAcquiredError);
+}
+exports.tryAcquire = tryAcquire;
+
+
+/***/ }),
+
+/***/ 919:
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(635);
+var errors_1 = __webpack_require__(586);
+var Semaphore = /** @class */ (function () {
+    function Semaphore(_value, _cancelError) {
+        if (_cancelError === void 0) { _cancelError = errors_1.E_CANCELED; }
+        this._value = _value;
+        this._cancelError = _cancelError;
+        this._queue = [];
+        this._weightedWaiters = [];
+    }
+    Semaphore.prototype.acquire = function (weight, priority) {
+        var _this = this;
+        if (weight === void 0) { weight = 1; }
+        if (priority === void 0) { priority = 0; }
+        if (weight <= 0)
+            throw new Error("invalid weight ".concat(weight, ": must be positive"));
+        return new Promise(function (resolve, reject) {
+            var task = { resolve: resolve, reject: reject, weight: weight, priority: priority };
+            var i = findIndexFromEnd(_this._queue, function (other) { return priority <= other.priority; });
+            if (i === -1 && weight <= _this._value) {
+                // Needs immediate dispatch, skip the queue
+                _this._dispatchItem(task);
+            }
+            else {
+                _this._queue.splice(i + 1, 0, task);
+            }
+        });
+    };
+    Semaphore.prototype.runExclusive = function (callback_1) {
+        return tslib_1.__awaiter(this, arguments, void 0, function (callback, weight, priority) {
+            var _a, value, release;
+            if (weight === void 0) { weight = 1; }
+            if (priority === void 0) { priority = 0; }
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0: return [4 /*yield*/, this.acquire(weight, priority)];
+                    case 1:
+                        _a = _b.sent(), value = _a[0], release = _a[1];
+                        _b.label = 2;
+                    case 2:
+                        _b.trys.push([2, , 4, 5]);
+                        return [4 /*yield*/, callback(value)];
+                    case 3: return [2 /*return*/, _b.sent()];
+                    case 4:
+                        release();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    Semaphore.prototype.waitForUnlock = function (weight, priority) {
+        var _this = this;
+        if (weight === void 0) { weight = 1; }
+        if (priority === void 0) { priority = 0; }
+        if (weight <= 0)
+            throw new Error("invalid weight ".concat(weight, ": must be positive"));
+        if (this._couldLockImmediately(weight, priority)) {
+            return Promise.resolve();
+        }
+        else {
+            return new Promise(function (resolve) {
+                if (!_this._weightedWaiters[weight - 1])
+                    _this._weightedWaiters[weight - 1] = [];
+                insertSorted(_this._weightedWaiters[weight - 1], { resolve: resolve, priority: priority });
+            });
+        }
+    };
+    Semaphore.prototype.isLocked = function () {
+        return this._value <= 0;
+    };
+    Semaphore.prototype.getValue = function () {
+        return this._value;
+    };
+    Semaphore.prototype.setValue = function (value) {
+        this._value = value;
+        this._dispatchQueue();
+    };
+    Semaphore.prototype.release = function (weight) {
+        if (weight === void 0) { weight = 1; }
+        if (weight <= 0)
+            throw new Error("invalid weight ".concat(weight, ": must be positive"));
+        this._value += weight;
+        this._dispatchQueue();
+    };
+    Semaphore.prototype.cancel = function () {
+        var _this = this;
+        this._queue.forEach(function (entry) { return entry.reject(_this._cancelError); });
+        this._queue = [];
+    };
+    Semaphore.prototype._dispatchQueue = function () {
+        this._drainUnlockWaiters();
+        while (this._queue.length > 0 && this._queue[0].weight <= this._value) {
+            this._dispatchItem(this._queue.shift());
+            this._drainUnlockWaiters();
+        }
+    };
+    Semaphore.prototype._dispatchItem = function (item) {
+        var previousValue = this._value;
+        this._value -= item.weight;
+        item.resolve([previousValue, this._newReleaser(item.weight)]);
+    };
+    Semaphore.prototype._newReleaser = function (weight) {
+        var _this = this;
+        var called = false;
+        return function () {
+            if (called)
+                return;
+            called = true;
+            _this.release(weight);
+        };
+    };
+    Semaphore.prototype._drainUnlockWaiters = function () {
+        if (this._queue.length === 0) {
+            for (var weight = this._value; weight > 0; weight--) {
+                var waiters = this._weightedWaiters[weight - 1];
+                if (!waiters)
+                    continue;
+                waiters.forEach(function (waiter) { return waiter.resolve(); });
+                this._weightedWaiters[weight - 1] = [];
+            }
+        }
+        else {
+            var queuedPriority_1 = this._queue[0].priority;
+            for (var weight = this._value; weight > 0; weight--) {
+                var waiters = this._weightedWaiters[weight - 1];
+                if (!waiters)
+                    continue;
+                var i = waiters.findIndex(function (waiter) { return waiter.priority <= queuedPriority_1; });
+                (i === -1 ? waiters : waiters.splice(0, i))
+                    .forEach((function (waiter) { return waiter.resolve(); }));
+            }
+        }
+    };
+    Semaphore.prototype._couldLockImmediately = function (weight, priority) {
+        return (this._queue.length === 0 || this._queue[0].priority < priority) &&
+            weight <= this._value;
+    };
+    return Semaphore;
+}());
+function insertSorted(a, v) {
+    var i = findIndexFromEnd(a, function (other) { return v.priority <= other.priority; });
+    a.splice(i + 1, 0, v);
+}
+function findIndexFromEnd(a, predicate) {
+    for (var i = a.length - 1; i >= 0; i--) {
+        if (predicate(a[i])) {
+            return i;
+        }
+    }
+    return -1;
+}
+exports["default"] = Semaphore;
+
+
+/***/ }),
+
+/***/ 921:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.namespace = void 0;
+exports.namespace = 'lastfm-bulk-edit';
+
+
+/***/ }),
+
+/***/ 946:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Modal = void 0;
+class Modal {
+    constructor(title, body, options) {
+        this.addedClass = false;
+        this.element = document.createElement('div');
+        this.options = options;
+        const fragment = modalTemplate.content.cloneNode(true);
+        const modalTitle = fragment.querySelector('.modal-title');
+        if (title instanceof Element) {
+            modalTitle.insertAdjacentElement('beforeend', title);
+        }
+        else {
+            modalTitle.insertAdjacentHTML('beforeend', title);
+        }
+        const modalBody = fragment.querySelector('.modal-body');
+        if (body instanceof Element) {
+            modalBody.insertAdjacentElement('beforeend', body);
+        }
+        else {
+            modalBody.insertAdjacentHTML('beforeend', body);
+        }
+        if (options && options.dismissible) {
+            // create X button that closes the modal
+            const closeButton = document.createElement('button');
+            closeButton.className = 'modal-dismiss sr-only';
+            closeButton.textContent = 'Close';
+            closeButton.addEventListener('click', () => this.hide());
+            // create modal actions div
+            const modalActions = document.createElement('div');
+            modalActions.className = 'modal-actions';
+            modalActions.appendChild(closeButton);
+            // append modal actions to modal content
+            const modalContent = fragment.querySelector('.modal-content');
+            modalContent.insertBefore(modalActions, modalContent.firstElementChild);
+            // close modal when user clicks outside modal
+            const popupWrapper = fragment.querySelector('.popup_wrapper');
+            popupWrapper.addEventListener('click', (event) => {
+                if (event.target instanceof Node && !modalContent.contains(event.target)) {
+                    this.hide();
+                }
+            });
+        }
+        this.element.appendChild(fragment);
+    }
+    get isAttached() {
+        return !!this.element.parentNode;
+    }
+    show() {
+        if (this.element.parentNode)
+            return;
+        document.body.appendChild(this.element);
+        if (!document.documentElement.classList.contains('popup_visible')) {
+            document.documentElement.classList.add('popup_visible');
+            this.addedClass = true;
+        }
+    }
+    hide() {
+        if (!this.element.parentNode)
+            return;
+        this.element.parentNode.removeChild(this.element);
+        if (this.addedClass) {
+            document.documentElement.classList.remove('popup_visible');
+            this.addedClass = false;
+        }
+        if (this.options && this.options.events && this.options.events.hide) {
+            this.options.events.hide();
+        }
+    }
+}
+exports.Modal = Modal;
+const modalTemplate = document.createElement('template');
+modalTemplate.innerHTML = `
+    <div class="popup_background"
+        style="opacity: 0.8; visibility: visible; background-color: rgb(0, 0, 0); position: fixed; top: 0px; right: 0px; bottom: 0px; left: 0px;">
+    </div>
+    <div class="popup_wrapper popup_wrapper_visible" style="opacity: 1; visibility: visible; position: fixed; overflow: auto; width: 100%; height: 100%; top: 0px; left: 0px; text-align: center;">
+        <div class="modal-dialog popup_content" role="dialog" aria-labelledby="modal-label" data-popup-initialized="true" aria-hidden="false" style="opacity: 1; visibility: visible; pointer-events: auto; display: inline-block; outline: none; text-align: left; position: relative; vertical-align: middle;" tabindex="-1">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <h2 class="modal-title"></h2>
+                </div>
+            </div>
+        </div>
+        <div class="popup_align" style="display: inline-block; vertical-align: middle; height: 100%;"></div>
+    </div>`;
 
 
 /***/ })
