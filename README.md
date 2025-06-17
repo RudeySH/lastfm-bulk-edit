@@ -14,14 +14,14 @@ Bulk edit your scrobbles for any artist, album or track on [Last.fm](https://www
 ## Instructions
 
 1. Upgrade to [Last.fm Pro](https://www.last.fm/pro).
-2. Install a userscript manager:
-   - [Violentmonkey](https://violentmonkey.github.io/) (open source, recommended).
-   - [Tampermonkey](https://tampermonkey.net/) (closed source, supports more browsers).
+2. Install a userscript manager (pick one):
+   - [Tampermonkey](https://tampermonkey.net/). Popular but closed source. Supports most browsers.
+   - [Violentmonkey](https://violentmonkey.github.io/). Open source. Doesn't support Chrome / Manifest V3.
    - Greasemonkey is currently not supported, see FAQ.
    - See next paragraph for Android devices (iOS not supported).
 3. Install this userscript: [Last.fm Bulk Edit](https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/main/dist/lastfm-bulk-edit.user.js).
-   - If you're using Violentmonkey, press the "Confirm installation" button on the left.
    - If you're using Tampermonkey, press the "Install" button on the top-left.
+   - If you're using Violentmonkey, press the "Confirm installation" button on the left.
 4. Go to your [Last.fm library](https://www.last.fm/user/_/library/artists).
 5. Use the new "Edit scrobbles" menu item like in the examples below.
 
@@ -130,7 +130,7 @@ For example, they can add features or enhancements to existing websites.
 Userscripts are not browser extensions. Instead, they can be enabled by a userscript manager.
 Userscript managers are browser extensions that install and run userscripts for you.
 
-[Violentmonkey](https://violentmonkey.github.io/) and [Tampermonkey](https://tampermonkey.net/) are the most popular userscript managers. Last.fm Bulk Edit currently only supports Violentmonkey and Tampermonkey.
+[Tampermonkey](https://tampermonkey.net/) and [Violentmonkey](https://violentmonkey.github.io/) are the most popular userscript managers. Last.fm Bulk Edit currently only supports Tampermonkey and Violentmonkey.
 
 
 ### Why is Greasemonkey not supported?
