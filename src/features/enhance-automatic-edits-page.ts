@@ -1,20 +1,18 @@
 import asyncPool from 'tiny-async-pool';
 import { ns } from '../constants';
-import { delay, encodeURIComponent2, fetchAndRetry } from '../utils/utils';
+import { encodeURIComponent2, fetchAndRetry } from '../utils/utils';
 
 const toolbarTemplate = document.createElement('template');
 toolbarTemplate.innerHTML = `
     <div>
-        <button type="button" class="btn-primary" disabled>
-            View All At Once
-        </button>
-        Go to artist: <select></select>
+        Go to album artist: <select></select>
     </div>`;
 
 const domParser = new DOMParser();
 
 const artistMap = new Map<string, Artist>();
 let artistSelect: HTMLSelectElement | undefined = undefined;
+let scrollArtistIntoView = false;
 
 let loadPagesPromise: Promise<Page[]> | undefined = undefined;
 let loadPagesProgressElement: HTMLElement | undefined = undefined;
@@ -37,14 +35,23 @@ export async function enhanceAutomaticEditsPage(element: Element) {
     }
 
     const section = element.querySelector('#subscription-corrections');
-    const table = section?.querySelector('table');
+    const table = section?.querySelector<HTMLTableElement>('.edits-list table.chart-table');
 
     if (!section || !table) {
         return;
     }
 
-    enhanceTable(table);
+    const keys = table.classList.contains('automatic-album-edits')
+        ? ['album_name', 'album_artist_name']
+        : ['track_name', 'artist_name', 'album_name', 'album_artist_name'];
 
+    enhanceTable(table, keys);
+
+    // TODO: revive "Go to" select feature
+    //addToolbar(section, table);
+}
+
+async function addToolbar(section: Element, table: HTMLTableElement) {
     const paginationList = section.querySelector('.pagination-list');
 
     if (!paginationList) {
@@ -83,8 +90,9 @@ export async function enhanceAutomaticEditsPage(element: Element) {
     artistSelect.addEventListener('change', function () {
         const selectedArtist = artistMap.get(this.value)!;
         const anchor = document.createElement('a');
-        anchor.href = `?page=${selectedArtist.pageNumber}&artist=${encodeURIComponent2(selectedArtist.name)}`;
+        anchor.href = `?page=${selectedArtist.pageNumber}&album-artist=${encodeURIComponent2(selectedArtist.name)}`;
         document.body.appendChild(anchor);
+        scrollArtistIntoView = true;
         anchor.click();
         document.body.removeChild(anchor);
     });
@@ -94,98 +102,26 @@ export async function enhanceAutomaticEditsPage(element: Element) {
     toolbar.insertAdjacentElement('beforeend', loadPagesProgressElement);
 
     loadPagesPromise ??= loadPages(table, currentPageNumber, pageCount);
-    const pages = await loadPagesPromise;
+    await loadPagesPromise;
 
     toolbar.removeChild(loadPagesProgressElement);
-
-    const viewAllButton = toolbar.querySelector('button')!;
-    viewAllButton.disabled = false;
-
-    viewAllButton.addEventListener('click', async () => {
-        if (pages.length >= 100 && !window.confirm(`You are about to view ${pages.length} pages at once. This might take a long time to load. Are you sure?`)) {
-            return;
-        }
-
-        viewAllButton.disabled = true;
-
-        table.style.tableLayout = 'fixed';
-
-        const tableBody = table.tBodies[0];
-        const firstRow: HTMLTableRowElement = tableBody.rows[0];
-
-        for (const page of pages) {
-            if (page.pageNumber === currentPageNumber) {
-                continue;
-            }
-
-            for (const row of page.rows) {
-                enhanceRow(row);
-
-                if (page.pageNumber < currentPageNumber) {
-                    firstRow.insertAdjacentElement('beforebegin', row);
-                } else {
-                    tableBody.appendChild(row);
-                }
-            }
-
-            if (page.pageNumber % 10 === 0) {
-                await delay(1);
-            }
-        }
-    });
 }
 
-function enhanceTable(table: HTMLTableElement) {
+function enhanceTable(table: HTMLTableElement, keys: string[]) {
     document.body.style.backgroundColor = '#fff';
     table.style.tableLayout = 'auto';
 
-    const headerRow = table.tHead!.rows[0];
-    const body = table.tBodies[0];
+    // TODO: revive clickable headers feature
+    // for (const cell of table.tHead!.rows[0].cells) {
+    //     cell.innerHTML = `<a href="javascript:void(0)" role="button">${cell.textContent}</a>`;
+    // }
 
-    let sortedCellIndex = 1;
-
-    const keys = [
-        'track_name_original',
-        'artist_name_original',
-        'album_name_original',
-        'album_artist_name_original',
-    ]
-
-    for (let i = 0; i < 4; i++) {
-        const key = keys[i];
-        const cell = headerRow.cells[i];
-
-        cell.innerHTML = `<a href="javascript:void(0)" role="button">${cell.textContent}</a>`;
-
-        cell.addEventListener('click', () => {
-            const dir = sortedCellIndex === i ? -1 : 1;
-            sortedCellIndex = sortedCellIndex === i ? -1 : i;
-
-            const rows = [...body.rows].map(row => {
-                let value = row.dataset[key];
-
-                if (!value) {
-                    value = row.querySelector<HTMLInputElement>(`input[name="${key}"]`)!.value;
-                    row.dataset[key] = value;
-                }
-
-                return { row, value };
-            });
-
-            rows.sort((a, b) => a.value.localeCompare(b.value) * dir);
-
-            for (const row of rows) {
-                body.appendChild(row.row);
-            }
-        });
-    }
-
-    for (const row of body.rows) {
-        enhanceRow(row);
+    for (const row of table.tBodies[0].rows) {
+        enhanceRow(row, keys);
     }
 }
 
-function enhanceRow(row: HTMLTableRowElement) {
+function enhanceRow(row: HTMLTableRowElement, keys: string[]) {
     if (row.dataset['enhanced'] === 'true') {
         return;
     }
@@ -193,16 +129,6 @@ function enhanceRow(row: HTMLTableRowElement) {
     row.dataset['enhanced'] = 'true';
 
     const formData = getFormData(row);
-
-    const trackName = formData.get('track_name')!.toString();
-    const artistName = formData.get('artist_name')!.toString();
-    const albumName = formData.get('album_name')!.toString();
-    const albumArtistName = formData.get('album_artist_name')!.toString();
-
-    const originalTrackName = formData.get('track_name_original')!.toString();
-    const originalArtistName = formData.get('artist_name_original')!.toString();
-    const originalAlbumName = formData.get('album_name_original')!.toString();
-    const originalAlbumArtistName = formData.get('album_artist_name_original')!.toString();
 
     function emphasize(cell: HTMLTableCellElement, content: string) {
         cell.style.lineHeight = '1';
@@ -220,27 +146,28 @@ function enhanceRow(row: HTMLTableRowElement) {
             </small>`
     }
 
-    if (trackName !== originalTrackName) {
-        emphasize(row.cells[0], trackName);
-    } else {
-        // remove bold
-        row.cells[0].innerHTML = row.cells[0].textContent!;
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        const currentValue = formData.get(key)!.toString();
+        const originalValue = formData.get(`${key}_original`)!.toString();
+
+        if (currentValue !== originalValue) {
+            emphasize(row.cells[i], currentValue);
+        } else if (i === 0) {
+            // remove bold
+            row.cells[0].innerHTML = row.cells[0].textContent!;
+        }
     }
 
-    if (artistName !== originalArtistName) {
-        emphasize(row.cells[1], artistName);
-    }
+    const originalAlbumArtistName = formData.get('album_artist_name_original')!.toString();
 
-    if (albumName !== originalAlbumName) {
-        emphasize(row.cells[2], albumName);
-    }
-
-    if (albumArtistName !== originalAlbumArtistName) {
-        emphasize(row.cells[3], albumArtistName);
-    }
-
-    if (originalArtistName.toLowerCase() === getSelectedArtistKey()) {
+    if (originalAlbumArtistName.toLowerCase() === getSelectedArtistKey()) {
         row.classList.add(`${ns}-highlight`);
+
+        if (scrollArtistIntoView) {
+            scrollArtistIntoView = false;
+            row.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
     }
 }
 
@@ -249,7 +176,7 @@ function getFormData(row: HTMLTableRowElement) {
 }
 
 function getSelectedArtistKey() {
-    return new URLSearchParams(location.search).get('artist')?.toLowerCase();
+    return new URLSearchParams(location.search).get('album-artist')?.toLowerCase();
 }
 
 async function loadPages(table: HTMLTableElement, currentPageNumber: number, pageCount: number) {
@@ -285,7 +212,7 @@ async function loadPage(pageNumber: number) {
 
     const doc = domParser.parseFromString(text, 'text/html');
 
-    const table = doc.querySelector<HTMLTableElement>('.chart-table')!;
+    const table = doc.querySelector<HTMLTableElement>('.edits-list table.chart-table')!;
 
     return {
         pageNumber,
@@ -298,7 +225,7 @@ function addArtistsToSelect(page: Page) {
 
     for (const row of page.rows) {
         const formData = getFormData(row);
-        const name = formData.get('artist_name_original')!.toString();
+        const name = formData.get('album_artist_name_original')!.toString();
         const sortName = name.replace(/\s+/g, '');
 
         const key = name.toLowerCase();

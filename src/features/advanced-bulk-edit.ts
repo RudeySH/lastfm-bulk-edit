@@ -599,16 +599,6 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[]) {
     submitButton.addEventListener('click', async (event: Event) => {
         event.preventDefault();
 
-        for (const element of form.elements) {
-            if (element instanceof HTMLInputElement && element.dataset['confirm'] && element.placeholder !== 'Mixed') {
-                if (confirm(element.dataset['confirm'])) {
-                    delete element.dataset['confirm']; // don't confirm again when resubmitting
-                } else {
-                    return; // stop submit
-                }
-            }
-        }
-
         const formData = new FormData(form);
         const formDataToSubmit = [];
 
@@ -670,8 +660,18 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[]) {
         }
 
         if (formDataToSubmit.length === 0) {
-            alert('Your edit doesn\'t contain any real changes.'); // TODO: pretty validation messages
+            alert('Your edit doesn\'t contain any real changes. We cannot accept casing changes.'); // TODO: pretty validation messages
             return;
+        }
+
+        if (formDataToSubmit.length > 1) {
+            for (const element of form.elements) {
+                if (element instanceof HTMLInputElement && element.dataset['confirm'] && element.placeholder !== 'Mixed') {
+                    if (!confirm(element.dataset['confirm'])) {
+                        return; // stop submit
+                    }
+                }
+            }
         }
 
         // hide the Edit Scrobble form
