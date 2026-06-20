@@ -1,5 +1,5 @@
 import { Step } from './Step';
-import { namespace } from '../constants';
+import { ns } from '../constants';
 import { LoadingModalOptions } from './LoadingModalOptions';
 import { Modal } from './Modal';
 
@@ -12,13 +12,13 @@ export class LoadingModal extends Modal<LoadingModalOptions> implements Step {
 
     constructor(title: Element | string, options?: LoadingModalOptions) {
         const body = `
-            <div class="${namespace}-loading">
-                <div class="${namespace}-progress"></div>
+            <div class="${ns}-loading">
+                <div class="${ns}-progress"></div>
             </div>`;
 
         super(title, body, options);
 
-        this.progress = this.element.querySelector(`.${namespace}-progress`)!;
+        this.progress = this.element.querySelector(`.${ns}-progress`)!;
     }
 
     public refreshProgress() {

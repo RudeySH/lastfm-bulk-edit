@@ -23,13 +23,13 @@ var config = {
     minimize: false,
   },
   output: {
-    filename: 'lastfm-bulk-edit.js',
+    filename: 'lastfm-advanced.js',
     path: path.resolve(__dirname, 'dist'),
   },
   plugins: [
     new UserscriptPlugin({
       headers: {
-        name: 'Last.fm Bulk Edit',
+        name: 'Last.fm Advanced (Bulk Edit)',
         match: 'https://www.last.fm/*',
         icon: 'https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/main/img/icon.png',
         license: 'AGPL-3.0-or-later',

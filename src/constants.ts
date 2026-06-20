@@ -1,1 +1,1 @@
-export const namespace = 'lastfm-bulk-edit';
+export const ns = 'advanced';

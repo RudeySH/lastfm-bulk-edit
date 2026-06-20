@@ -1,7 +1,7 @@
 export async function createTimestampLinks(element: Element) {
-    const libraryHref = document.querySelector<HTMLAnchorElement>('.secondary-nav-item--library a')?.href;
+    const libraryHref = document.querySelector<HTMLAnchorElement>('.secondary-nav-item--library a')?.getAttribute('href');
 
-    if (!libraryHref) {
+    if (!libraryHref || !document.URL.includes(libraryHref + '/')) {
         return;
     }
 

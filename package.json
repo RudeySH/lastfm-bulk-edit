@@ -1,8 +1,8 @@
 {
-  "name": "lastfm-bulk-edit",
-  "version": "1.6.1",
-  "description": "Bulk edit your scrobbles for any artist or album on Last.fm at once.",
-  "main": "dist/lastfm-bulk-edit.js",
+  "name": "lastfm-advanced",
+  "version": "2.0.0",
+  "description": "New and improved features for Last.fm. Advanced bulk edit, and more!",
+  "main": "dist/lastfm-advanced.js",
   "scripts": {
     "build": "webpack",
     "build-development": "webpack --mode development",
@@ -12,7 +12,7 @@
     "type": "git",
     "url": "git+https://github.com/RudeySH/lastfm-bulk-edit.git"
   },
-  "author": "Rudey",
+  "author": "RudeySH",
   "license": "AGPL-3.0-or-later",
   "bugs": {
     "url": "https://github.com/RudeySH/lastfm-bulk-edit/issues"
@@ -26,10 +26,10 @@
     "@types/tiny-async-pool": "^2.0.3",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
     "@typescript-eslint/parser": "^7.14.1",
-    "eslint": "^8.57.0",
+    "eslint": "^8.57.1",
     "ts-loader": "^9.5.1",
-    "typescript": "^5.5.2",
-    "webpack": "^5.92.1",
+    "typescript": "^5.6.3",
+    "webpack": "^5.96.1",
     "webpack-cli": "^5.1.4",
     "webpack-userscript": "^3.1.0"
   },

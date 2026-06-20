@@ -1,5 +1,5 @@
 import asyncPool from 'tiny-async-pool';
-import { namespace } from '../constants';
+import { ns } from '../constants';
 import { delay, encodeURIComponent2, fetchAndRetry } from '../utils/utils';
 
 const toolbarTemplate = document.createElement('template');
@@ -240,7 +240,7 @@ function enhanceRow(row: HTMLTableRowElement) {
     }
 
     if (originalArtistName.toLowerCase() === getSelectedArtistKey()) {
-        row.classList.add(`${namespace}-highlight`);
+        row.classList.add(`${ns}-highlight`);
     }
 }
 
