@@ -1,12 +1,13 @@
 {
   "name": "lastfm-advanced",
-  "version": "2.0.0",
+  "version": "2.0.0-alpha.0",
   "description": "New and improved features for Last.fm. Advanced bulk edit, and more!",
   "main": "dist/lastfm-advanced.js",
   "scripts": {
     "build": "webpack",
     "build-development": "webpack --mode development",
-    "lint": "eslint . --fix"
+    "lint": "eslint . --fix",
+    "typecheck": "tsc --noEmit"
   },
   "repository": {
     "type": "git",
@@ -17,21 +18,21 @@
   "bugs": {
     "url": "https://github.com/RudeySH/lastfm-bulk-edit/issues"
   },
-  "homepage": "https://github.com/RudeySH/lastfm-bulk-edit",
+  "homepage": "https://github.com/RudeySH/lastfm-bulk-edit/tree/v2",
   "private": true,
   "devDependencies": {
-    "@tsconfig/recommended": "^1.0.6",
+    "@tsconfig/recommended": "^1.0.13",
     "@types/greasemonkey": "^4.0.7",
     "@types/he": "^1.2.3",
     "@types/tiny-async-pool": "^2.0.3",
-    "@typescript-eslint/eslint-plugin": "^7.14.1",
-    "@typescript-eslint/parser": "^7.14.1",
-    "eslint": "^8.57.1",
-    "ts-loader": "^9.5.1",
-    "typescript": "^5.6.3",
-    "webpack": "^5.96.1",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.0",
+    "ts-loader": "^9.6.1",
+    "typescript": "5.5.4",
+    "webpack": "^5.107.2",
     "webpack-cli": "^5.1.4",
-    "webpack-userscript": "^3.1.0"
+    "webpack-userscript": "^3.2.3"
   },
   "dependencies": {
     "async-mutex": "^0.5.0",

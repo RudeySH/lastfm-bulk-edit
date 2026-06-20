@@ -1,29 +1,29 @@
 // ==UserScript==
 // @name Last.fm Advanced (Bulk Edit)
 // @description New and improved features for Last.fm. Advanced bulk edit, and more!
-// @version 2.0.0
+// @version 2.0.0-alpha.0
 // @author RudeySH
-// @homepage https://github.com/RudeySH/lastfm-bulk-edit
+// @homepage https://github.com/RudeySH/lastfm-bulk-edit/tree/v2
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
 // @match https://www.last.fm/*
-// @downloadURL https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/main/dist/lastfm-advanced.user.js
-// @icon https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/main/img/icon.png
+// @downloadURL https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/refs/heads/v2/dist/lastfm-advanced.user.js
+// @icon https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/refs/heads/v2/img/icon.png
 // @license AGPL-3.0-or-later
 // @namespace https://github.com/RudeySH/lastfm-bulk-edit
 // @require https://cdnjs.cloudflare.com/ajax/libs/he/1.2.0/he.min.js
-// @updateURL https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/main/dist/lastfm-advanced.meta.js
+// @updateURL https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/refs/heads/v2/dist/lastfm-advanced.meta.js
 // ==/UserScript==
 
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 406:
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+/***/ 406
+(__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-var tslib_1 = __webpack_require__(653);
+var tslib_1 = __webpack_require__(635);
 var Semaphore_1 = __webpack_require__(919);
 var Mutex = /** @class */ (function () {
     function Mutex(cancelError) {
@@ -66,15 +66,15 @@ var Mutex = /** @class */ (function () {
 exports["default"] = Mutex;
 
 
-/***/ }),
+/***/ },
 
-/***/ 919:
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+/***/ 919
+(__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-var tslib_1 = __webpack_require__(653);
+var tslib_1 = __webpack_require__(635);
 var errors_1 = __webpack_require__(586);
 var Semaphore = /** @class */ (function () {
     function Semaphore(_value, _cancelError) {
@@ -229,10 +229,10 @@ function findIndexFromEnd(a, predicate) {
 exports["default"] = Semaphore;
 
 
-/***/ }),
+/***/ },
 
-/***/ 586:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ 586
+(__unused_webpack_module, exports) {
 
 "use strict";
 
@@ -243,16 +243,16 @@ exports.E_ALREADY_LOCKED = new Error('mutex already locked');
 exports.E_CANCELED = new Error('request for lock canceled');
 
 
-/***/ }),
+/***/ },
 
-/***/ 693:
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+/***/ 693
+(__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.tryAcquire = exports.withTimeout = exports.Semaphore = exports.Mutex = void 0;
-var tslib_1 = __webpack_require__(653);
+var tslib_1 = __webpack_require__(635);
 var Mutex_1 = __webpack_require__(406);
 Object.defineProperty(exports, "Mutex", ({ enumerable: true, get: function () { return Mutex_1.default; } }));
 var Semaphore_1 = __webpack_require__(919);
@@ -264,10 +264,10 @@ Object.defineProperty(exports, "tryAcquire", ({ enumerable: true, get: function 
 tslib_1.__exportStar(__webpack_require__(586), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ 746:
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+/***/ 746
+(__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
 
@@ -284,16 +284,16 @@ function tryAcquire(sync, alreadyAcquiredError) {
 exports.tryAcquire = tryAcquire;
 
 
-/***/ }),
+/***/ },
 
-/***/ 646:
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+/***/ 646
+(__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.withTimeout = void 0;
-var tslib_1 = __webpack_require__(653);
+var tslib_1 = __webpack_require__(635);
 /* eslint-disable @typescript-eslint/no-explicit-any */
 var errors_1 = __webpack_require__(586);
 function withTimeout(sync, timeout, timeoutError) {
@@ -420,10 +420,10 @@ function isSemaphore(sync) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ 692:
-/***/ ((module) => {
+/***/ 692
+(module) {
 
 async function* asyncPool(concurrency, iterable, iteratorFn) {
   const executing = new Set();
@@ -452,22 +452,23 @@ async function* asyncPool(concurrency, iterable, iteratorFn) {
 module.exports = asyncPool;
 
 
-/***/ }),
+/***/ },
 
-/***/ 921:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ 921
+(__unused_webpack_module, exports) {
 
 "use strict";
+var __webpack_unused_export__;
 
-Object.defineProperty(exports, "__esModule", ({ value: true }));
+__webpack_unused_export__ = ({ value: true });
 exports.ns = void 0;
 exports.ns = 'advanced';
 
 
-/***/ }),
+/***/ },
 
-/***/ 556:
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+/***/ 556
+(__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
 
@@ -984,16 +985,6 @@ async function augmentEditScrobbleForm(scrobbleData) {
     submitButton.addEventListener('click', async (event) => {
         var _a, _b;
         event.preventDefault();
-        for (const element of form.elements) {
-            if (element instanceof HTMLInputElement && element.dataset['confirm'] && element.placeholder !== 'Mixed') {
-                if (confirm(element.dataset['confirm'])) {
-                    delete element.dataset['confirm']; // don't confirm again when resubmitting
-                }
-                else {
-                    return; // stop submit
-                }
-            }
-        }
         const formData = new FormData(form);
         const formDataToSubmit = [];
         const track_name = getMixedInputValue(track_name_input);
@@ -1042,8 +1033,17 @@ async function augmentEditScrobbleForm(scrobbleData) {
             }
         }
         if (formDataToSubmit.length === 0) {
-            alert('Your edit doesn\'t contain any real changes.'); // TODO: pretty validation messages
+            alert('Your edit doesn\'t contain any real changes. We cannot accept casing changes.'); // TODO: pretty validation messages
             return;
+        }
+        if (formDataToSubmit.length > 1) {
+            for (const element of form.elements) {
+                if (element instanceof HTMLInputElement && element.dataset['confirm'] && element.placeholder !== 'Mixed') {
+                    if (!confirm(element.dataset['confirm'])) {
+                        return; // stop submit
+                    }
+                }
+            }
         }
         // hide the Edit Scrobble form
         const cancelButton = form.querySelector('button.js-close');
@@ -1240,14 +1240,15 @@ function cloneFormData(formData) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ 641:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ 641
+(__unused_webpack_module, exports) {
 
 "use strict";
+var __webpack_unused_export__;
 
-Object.defineProperty(exports, "__esModule", ({ value: true }));
+__webpack_unused_export__ = ({ value: true });
 exports.createTimestampLinks = createTimestampLinks;
 async function createTimestampLinks(element) {
     var _a;
@@ -1290,14 +1291,15 @@ function getDateString(date) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ 308:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ 308
+(__unused_webpack_module, exports) {
 
 "use strict";
+var __webpack_unused_export__;
 
-Object.defineProperty(exports, "__esModule", ({ value: true }));
+__webpack_unused_export__ = ({ value: true });
 exports.displayAlbumName = displayAlbumName;
 async function displayAlbumName(element) {
     var _a, _b;
@@ -1381,10 +1383,10 @@ async function displayAlbumName(element) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ 252:
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+/***/ 252
+(__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
 
@@ -1399,26 +1401,31 @@ const utils_1 = __webpack_require__(135);
 const toolbarTemplate = document.createElement('template');
 toolbarTemplate.innerHTML = `
     <div>
-        <button type="button" class="btn-primary" disabled>
-            View All At Once
-        </button>
-        Go to artist: <select></select>
+        Go to album artist: <select></select>
     </div>`;
 const domParser = new DOMParser();
 const artistMap = new Map();
-let artistSelect = undefined;
-let loadPagesPromise = undefined;
-let loadPagesProgressElement = undefined;
+let artistSelect = (/* unused pure expression or super */ null && (undefined));
+let scrollArtistIntoView = false;
+let loadPagesPromise = (/* unused pure expression or super */ null && (undefined));
+let loadPagesProgressElement = (/* unused pure expression or super */ null && (undefined));
 async function enhanceAutomaticEditsPage(element) {
     if (!document.URL.includes('/settings/subscription/automatic-edits')) {
         return;
     }
     const section = element.querySelector('#subscription-corrections');
-    const table = section === null || section === void 0 ? void 0 : section.querySelector('table');
+    const table = section === null || section === void 0 ? void 0 : section.querySelector('.edits-list table.chart-table');
     if (!section || !table) {
         return;
     }
-    enhanceTable(table);
+    const keys = table.classList.contains('automatic-album-edits')
+        ? ['album_name', 'album_artist_name']
+        : ['track_name', 'artist_name', 'album_name', 'album_artist_name'];
+    enhanceTable(table, keys);
+    // TODO: revive "Go to" select feature
+    //addToolbar(section, table);
+}
+async function addToolbar(section, table) {
     const paginationList = section.querySelector('.pagination-list');
     if (!paginationList) {
         return;
@@ -1447,8 +1454,9 @@ async function enhanceAutomaticEditsPage(element) {
     artistSelect.addEventListener('change', function () {
         const selectedArtist = artistMap.get(this.value);
         const anchor = document.createElement('a');
-        anchor.href = `?page=${selectedArtist.pageNumber}&artist=${(0, utils_1.encodeURIComponent2)(selectedArtist.name)}`;
+        anchor.href = `?page=${selectedArtist.pageNumber}&album-artist=${(0, utils_1.encodeURIComponent2)(selectedArtist.name)}`;
         document.body.appendChild(anchor);
+        scrollArtistIntoView = true;
         anchor.click();
         document.body.removeChild(anchor);
     });
@@ -1456,88 +1464,26 @@ async function enhanceAutomaticEditsPage(element) {
     toolbar.insertAdjacentText('beforeend', ' ');
     toolbar.insertAdjacentElement('beforeend', loadPagesProgressElement);
     loadPagesPromise !== null && loadPagesPromise !== void 0 ? loadPagesPromise : (loadPagesPromise = loadPages(table, currentPageNumber, pageCount));
-    const pages = await loadPagesPromise;
+    await loadPagesPromise;
     toolbar.removeChild(loadPagesProgressElement);
-    const viewAllButton = toolbar.querySelector('button');
-    viewAllButton.disabled = false;
-    viewAllButton.addEventListener('click', async () => {
-        if (pages.length >= 100 && !window.confirm(`You are about to view ${pages.length} pages at once. This might take a long time to load. Are you sure?`)) {
-            return;
-        }
-        viewAllButton.disabled = true;
-        table.style.tableLayout = 'fixed';
-        const tableBody = table.tBodies[0];
-        const firstRow = tableBody.rows[0];
-        for (const page of pages) {
-            if (page.pageNumber === currentPageNumber) {
-                continue;
-            }
-            for (const row of page.rows) {
-                enhanceRow(row);
-                if (page.pageNumber < currentPageNumber) {
-                    firstRow.insertAdjacentElement('beforebegin', row);
-                }
-                else {
-                    tableBody.appendChild(row);
-                }
-            }
-            if (page.pageNumber % 10 === 0) {
-                await (0, utils_1.delay)(1);
-            }
-        }
-    });
 }
-function enhanceTable(table) {
+function enhanceTable(table, keys) {
     document.body.style.backgroundColor = '#fff';
     table.style.tableLayout = 'auto';
-    const headerRow = table.tHead.rows[0];
-    const body = table.tBodies[0];
-    let sortedCellIndex = 1;
-    const keys = [
-        'track_name_original',
-        'artist_name_original',
-        'album_name_original',
-        'album_artist_name_original',
-    ];
-    for (let i = 0; i < 4; i++) {
-        const key = keys[i];
-        const cell = headerRow.cells[i];
-        cell.innerHTML = `<a href="javascript:void(0)" role="button">${cell.textContent}</a>`;
-        cell.addEventListener('click', () => {
-            const dir = sortedCellIndex === i ? -1 : 1;
-            sortedCellIndex = sortedCellIndex === i ? -1 : i;
-            const rows = [...body.rows].map(row => {
-                let value = row.dataset[key];
-                if (!value) {
-                    value = row.querySelector(`input[name="${key}"]`).value;
-                    row.dataset[key] = value;
-                }
-                return { row, value };
-            });
-            rows.sort((a, b) => a.value.localeCompare(b.value) * dir);
-            for (const row of rows) {
-                body.appendChild(row.row);
-            }
-        });
-    }
-    for (const row of body.rows) {
-        enhanceRow(row);
+    // TODO: revive clickable headers feature
+    // for (const cell of table.tHead!.rows[0].cells) {
+    //     cell.innerHTML = `<a href="javascript:void(0)" role="button">${cell.textContent}</a>`;
+    // }
+    for (const row of table.tBodies[0].rows) {
+        enhanceRow(row, keys);
     }
 }
-function enhanceRow(row) {
+function enhanceRow(row, keys) {
     if (row.dataset['enhanced'] === 'true') {
         return;
     }
     row.dataset['enhanced'] = 'true';
     const formData = getFormData(row);
-    const trackName = formData.get('track_name').toString();
-    const artistName = formData.get('artist_name').toString();
-    const albumName = formData.get('album_name').toString();
-    const albumArtistName = formData.get('album_artist_name').toString();
-    const originalTrackName = formData.get('track_name_original').toString();
-    const originalArtistName = formData.get('artist_name_original').toString();
-    const originalAlbumName = formData.get('album_name_original').toString();
-    const originalAlbumArtistName = formData.get('album_artist_name_original').toString();
     function emphasize(cell, content) {
         var _a;
         cell.style.lineHeight = '1';
@@ -1554,24 +1500,25 @@ function enhanceRow(row) {
                 Originally "${(_a = cell.textContent) === null || _a === void 0 ? void 0 : _a.trim()}"
             </small>`;
     }
-    if (trackName !== originalTrackName) {
-        emphasize(row.cells[0], trackName);
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        const currentValue = formData.get(key).toString();
+        const originalValue = formData.get(`${key}_original`).toString();
+        if (currentValue !== originalValue) {
+            emphasize(row.cells[i], currentValue);
+        }
+        else if (i === 0) {
+            // remove bold
+            row.cells[0].innerHTML = row.cells[0].textContent;
+        }
     }
-    else {
-        // remove bold
-        row.cells[0].innerHTML = row.cells[0].textContent;
-    }
-    if (artistName !== originalArtistName) {
-        emphasize(row.cells[1], artistName);
-    }
-    if (albumName !== originalAlbumName) {
-        emphasize(row.cells[2], albumName);
-    }
-    if (albumArtistName !== originalAlbumArtistName) {
-        emphasize(row.cells[3], albumArtistName);
-    }
-    if (originalArtistName.toLowerCase() === getSelectedArtistKey()) {
+    const originalAlbumArtistName = formData.get('album_artist_name_original').toString();
+    if (originalAlbumArtistName.toLowerCase() === getSelectedArtistKey()) {
         row.classList.add(`${constants_1.ns}-highlight`);
+        if (scrollArtistIntoView) {
+            scrollArtistIntoView = false;
+            row.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
     }
 }
 function getFormData(row) {
@@ -1579,7 +1526,7 @@ function getFormData(row) {
 }
 function getSelectedArtistKey() {
     var _a;
-    return (_a = new URLSearchParams(location.search).get('artist')) === null || _a === void 0 ? void 0 : _a.toLowerCase();
+    return (_a = new URLSearchParams(location.search).get('album-artist')) === null || _a === void 0 ? void 0 : _a.toLowerCase();
 }
 async function loadPages(table, currentPageNumber, pageCount) {
     const currentPage = { pageNumber: currentPageNumber, rows: [...table.tBodies[0].rows] };
@@ -1605,7 +1552,7 @@ async function loadPage(pageNumber) {
     });
     const text = await response.text();
     const doc = domParser.parseFromString(text, 'text/html');
-    const table = doc.querySelector('.chart-table');
+    const table = doc.querySelector('.edits-list table.chart-table');
     return {
         pageNumber,
         rows: [...table.tBodies[0].rows],
@@ -1615,7 +1562,7 @@ function addArtistsToSelect(page) {
     const selectedArtistKey = getSelectedArtistKey();
     for (const row of page.rows) {
         const formData = getFormData(row);
-        const name = formData.get('artist_name_original').toString();
+        const name = formData.get('album_artist_name_original').toString();
         const sortName = name.replace(/\s+/g, '');
         const key = name.toLowerCase();
         const artist = artistMap.get(key);
@@ -1642,14 +1589,15 @@ function updateProgressText(current, total) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ 694:
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+/***/ 694
+(__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
+var __webpack_unused_export__;
 
-Object.defineProperty(exports, "__esModule", ({ value: true }));
+__webpack_unused_export__ = ({ value: true });
 exports.LoadingModal = void 0;
 const constants_1 = __webpack_require__(921);
 const Modal_1 = __webpack_require__(946);
@@ -1687,14 +1635,15 @@ function getCompletionRatio(steps) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ 946:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ 946
+(__unused_webpack_module, exports) {
 
 "use strict";
+var __webpack_unused_export__;
 
-Object.defineProperty(exports, "__esModule", ({ value: true }));
+__webpack_unused_export__ = ({ value: true });
 exports.Modal = void 0;
 class Modal {
     constructor(title, body, options) {
@@ -1782,15 +1731,16 @@ modalTemplate.innerHTML = `
     </div>`;
 
 
-/***/ }),
+/***/ },
 
-/***/ 135:
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+/***/ 135
+(__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
+var __webpack_unused_export__;
 
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.delay = delay;
+__webpack_unused_export__ = ({ value: true });
+__webpack_unused_export__ = delay;
 exports.encodeURIComponent2 = encodeURIComponent2;
 exports.fetchAndRetry = fetchAndRetry;
 const async_mutex_1 = __webpack_require__(693);
@@ -1865,18 +1815,18 @@ async function fetchAndRetry(url, init, callback) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ 488:
-/***/ ((module) => {
+/***/ 488
+(module) {
 
 "use strict";
 module.exports = he;
 
-/***/ }),
+/***/ },
 
-/***/ 653:
-/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+/***/ 635
+(__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 __webpack_require__.r(__webpack_exports__);
@@ -1906,6 +1856,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   __propKey: () => (/* binding */ __propKey),
 /* harmony export */   __read: () => (/* binding */ __read),
 /* harmony export */   __rest: () => (/* binding */ __rest),
+/* harmony export */   __rewriteRelativeImportExtension: () => (/* binding */ __rewriteRelativeImportExtension),
 /* harmony export */   __runInitializers: () => (/* binding */ __runInitializers),
 /* harmony export */   __setFunctionName: () => (/* binding */ __setFunctionName),
 /* harmony export */   __spread: () => (/* binding */ __spread),
@@ -1928,7 +1879,7 @@ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 ***************************************************************************** */
-/* global Reflect, Promise, SuppressedError, Symbol */
+/* global Reflect, Promise, SuppressedError, Symbol, Iterator */
 
 var extendStatics = function(d, b) {
   extendStatics = Object.setPrototypeOf ||
@@ -2039,8 +1990,8 @@ function __awaiter(thisArg, _arguments, P, generator) {
 }
 
 function __generator(thisArg, body) {
-  var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
-  return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+  var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
+  return g.next = verb(0), g["throw"] = verb(1), g["return"] = verb(2), typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
   function verb(n) { return function (v) { return step([n, v]); }; }
   function step(op) {
       if (f) throw new TypeError("Generator is already executing.");
@@ -2144,7 +2095,7 @@ function __await(v) {
 function __asyncGenerator(thisArg, _arguments, generator) {
   if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
   var g = generator.apply(thisArg, _arguments || []), i, q = [];
-  return i = {}, verb("next"), verb("throw"), verb("return", awaitReturn), i[Symbol.asyncIterator] = function () { return this; }, i;
+  return i = Object.create((typeof AsyncIterator === "function" ? AsyncIterator : Object).prototype), verb("next"), verb("throw"), verb("return", awaitReturn), i[Symbol.asyncIterator] = function () { return this; }, i;
   function awaitReturn(f) { return function (v) { return Promise.resolve(v).then(f, reject); }; }
   function verb(n, f) { if (g[n]) { i[n] = function (v) { return new Promise(function (a, b) { q.push([n, v, a, b]) > 1 || resume(n, v); }); }; if (f) i[n] = f(i[n]); } }
   function resume(n, v) { try { step(g[n](v)); } catch (e) { settle(q[0][3], e); } }
@@ -2179,10 +2130,19 @@ var __setModuleDefault = Object.create ? (function(o, v) {
   o["default"] = v;
 };
 
+var ownKeys = function(o) {
+  ownKeys = Object.getOwnPropertyNames || function (o) {
+    var ar = [];
+    for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+    return ar;
+  };
+  return ownKeys(o);
+};
+
 function __importStar(mod) {
   if (mod && mod.__esModule) return mod;
   var result = {};
-  if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+  if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
   __setModuleDefault(result, mod);
   return result;
 }
@@ -2242,20 +2202,34 @@ function __disposeResources(env) {
     env.error = env.hasError ? new _SuppressedError(e, env.error, "An error was suppressed during disposal.") : e;
     env.hasError = true;
   }
+  var r, s = 0;
   function next() {
-    while (env.stack.length) {
-      var rec = env.stack.pop();
+    while (r = env.stack.pop()) {
       try {
-        var result = rec.dispose && rec.dispose.call(rec.value);
-        if (rec.async) return Promise.resolve(result).then(next, function(e) { fail(e); return next(); });
+        if (!r.async && s === 1) return s = 0, env.stack.push(r), Promise.resolve().then(next);
+        if (r.dispose) {
+          var result = r.dispose.call(r.value);
+          if (r.async) return s |= 2, Promise.resolve(result).then(next, function(e) { fail(e); return next(); });
+        }
+        else s |= 1;
       }
       catch (e) {
-          fail(e);
+        fail(e);
       }
     }
+    if (s === 1) return env.hasError ? Promise.reject(env.error) : Promise.resolve();
     if (env.hasError) throw env.error;
   }
   return next();
+}
+
+function __rewriteRelativeImportExtension(path, preserveJsx) {
+  if (typeof path === "string" && /^\.\.?\//.test(path)) {
+      return path.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function (m, tsx, d, ext, cm) {
+          return tsx ? preserveJsx ? ".jsx" : ".js" : d && (!ext || !cm) ? m : (d + ext + "." + cm.toLowerCase() + "js");
+      });
+  }
+  return path;
 }
 
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
@@ -2264,6 +2238,10 @@ function __disposeResources(env) {
   __rest,
   __decorate,
   __param,
+  __esDecorate,
+  __runInitializers,
+  __propKey,
+  __setFunctionName,
   __metadata,
   __awaiter,
   __generator,
@@ -2286,10 +2264,11 @@ function __disposeResources(env) {
   __classPrivateFieldIn,
   __addDisposableResource,
   __disposeResources,
+  __rewriteRelativeImportExtension,
 });
 
 
-/***/ })
+/***/ }
 
 /******/ 	});
 /************************************************************************/
