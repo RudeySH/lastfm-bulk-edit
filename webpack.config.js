@@ -31,6 +31,7 @@ var config = {
       headers: {
         name: 'Last.fm Advanced (Bulk Edit)',
         match: 'https://www.last.fm/*',
+        grant: 'none',
         icon: 'https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/refs/heads/v2/img/icon.png',
         license: 'AGPL-3.0-or-later',
         namespace: 'https://github.com/RudeySH/lastfm-bulk-edit',

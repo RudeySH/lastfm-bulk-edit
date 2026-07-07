@@ -1,3 +1,5 @@
+import { ns } from "../constants";
+
 export async function displayAlbumName(element: Element) {
     const rows = element instanceof HTMLTableRowElement ? [element] : element.querySelectorAll('tr');
 
@@ -38,8 +40,8 @@ export async function displayAlbumName(element: Element) {
         }
 
         // Create and insert th element.
-        if (!table.classList.contains('lastfm-bulk-edit-chartlist-scrobbles')) {
-            table.classList.add('lastfm-bulk-edit-chartlist-scrobbles');
+        if (!table.classList.contains(`${ns}-chartlist-scrobbles`)) {
+            table.classList.add(`${ns}-chartlist-scrobbles`);
 
             const albumHeaderCell = document.createElement('th');
             albumHeaderCell.textContent = 'Album';
@@ -60,7 +62,7 @@ export async function displayAlbumName(element: Element) {
             albumCell.appendChild(albumAnchor);
         } else {
             const noAlbumText = document.createElement('em');
-            noAlbumText.className = 'lastfm-bulk-edit-text-danger';
+            noAlbumText.className = `${ns}-text-danger`;
             noAlbumText.textContent = 'No Album';
             albumCell.appendChild(noAlbumText);
         }
