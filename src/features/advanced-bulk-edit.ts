@@ -9,7 +9,7 @@ import { fetchAndRetry } from '../utils/utils';
 // use the top-right link to determine the current user
 const authLink = document.querySelector<HTMLAnchorElement>('a.auth-link')!;
 
-// https://regex101.com/r/UCmC8f/1
+// https://regex101.com/r/gGv1X0/1
 const albumRegExp = new RegExp(`^${authLink?.href}/library/music(/\\+[^/]*)*(/[^+][^/]*){2}$`);
 const artistRegExp = new RegExp(`^${authLink?.href}/library/music(/\\+[^/]*)*(/[^+][^/]*){1}(/\\+[^/]*)?$`);
 
@@ -120,6 +120,35 @@ function appendBulkEditScrobblesMenuItems(element: Element) {
 function getBulkEditScrobbleMenuItem(url: string, row?: HTMLTableRowElement) {
     const urlType = getUrlType(url);
 
+    // extract date filters from URL
+    const indexOfQuery = url.indexOf('?');
+    const dateFilters = new URLSearchParams();
+
+    if (indexOfQuery !== -1) {
+        const urlParams = new URLSearchParams(url.substring(indexOfQuery));
+        const datePreset = urlParams.get('date_preset') ?? '';
+
+        if (['LAST_7_DAYS', 'LAST_30_DAYS', 'LAST_90_DAYS', 'LAST_180_DAYS', 'LAST_365_DAYS'].includes(datePreset)) {
+            dateFilters.set('date_preset', datePreset);
+        } else {
+            const dateRegExp = /^\d{4}-\d{2}-\d{2}/;
+            const from = urlParams.get('from');
+            const to = urlParams.get('to');
+
+            if (from && dateRegExp.test(from) && from >= '2002-01-01') {
+                dateFilters.set('from', from);
+            }
+
+            if (to && dateRegExp.test(to) && to < new Date().toISOString()) {
+                dateFilters.set('to', urlParams.get('to')!);
+            }
+        }
+
+        // remove all query params from URL
+        url = url.substring(0, indexOfQuery);
+    }
+
+
     const form = bulkEditScrobbleFormTemplate.content.firstElementChild!.cloneNode(true) as HTMLFormElement;
     const submitButton = form.querySelector<HTMLButtonElement>('button')!;
 
@@ -131,7 +160,7 @@ function getBulkEditScrobbleMenuItem(url: string, row?: HTMLTableRowElement) {
             const loadingModal = createLoadingModal('Loading Scrobbles...', { dismissible: true, display: 'percentage' });
 
             try {
-                allScrobbleData = await fetchScrobbleData(url, loadingModal, loadingModal);
+                allScrobbleData = await fetchScrobbleData(url, dateFilters, loadingModal, loadingModal);
 
                 if (!loadingModal.isAttached) {
                     return;
@@ -268,7 +297,7 @@ function getBulkEditScrobbleMenuItem(url: string, row?: HTMLTableRowElement) {
     };
 
     submitButton.addEventListener('click', async () => {
-        await augmentEditScrobbleForm(scrobbleData);
+        await augmentEditScrobbleForm(scrobbleData, dateFilters);
     });
 
     return { form, click };
@@ -328,8 +357,8 @@ function createLoadingModal(title: Element | string, options: LoadingModalOption
 }
 
 // this is a recursive function that browses pages of artists, albums and tracks to gather scrobbles
-async function fetchScrobbleData(url: string, loadingModal: LoadingModal, parentStep: Step): Promise<FormData[]> {
-    // remove "?date_preset=LAST_365_DAYS", etc.
+async function fetchScrobbleData(url: string, dateFilters: URLSearchParams, loadingModal: LoadingModal, parentStep: Step): Promise<FormData[]> {
+        // remove all query params from URL
     const indexOfQuery = url.indexOf('?');
     if (indexOfQuery !== -1) {
         url = url.substring(0, indexOfQuery);
@@ -349,15 +378,14 @@ async function fetchScrobbleData(url: string, loadingModal: LoadingModal, parent
             break;
     }
 
-
-    const documentsToFetch = [fetchHTMLDocument(url)];
+    const documentsToFetch = [fetchHTMLDocument(`${url}?${dateFilters.toString()}`)];
     const firstDocument = await documentsToFetch[0];
     const paginationList = firstDocument.querySelector('.pagination-list');
 
     if (paginationList) {
         const pageCount = parseInt(paginationList.children[paginationList.children.length - 2].textContent!.trim(), 10);
         const pageNumbersToFetch = [...Array(pageCount - 1).keys()].map((i) => i + 2);
-        documentsToFetch.push(...pageNumbersToFetch.map((n) => fetchHTMLDocument(`${url}?page=${n}`)));
+        documentsToFetch.push(...pageNumbersToFetch.map((n) => fetchHTMLDocument(`${url}?page=${n}&${dateFilters.toString()}`)));
     }
 
     const scrobbleData = await forEachParallel(loadingModal, parentStep, documentsToFetch, async (documentToFetch, step) => {
@@ -386,7 +414,7 @@ async function fetchScrobbleData(url: string, loadingModal: LoadingModal, parent
             const link = row.querySelector<HTMLAnchorElement>('.chartlist-count-bar-link');
             if (link) {
                 // recursive call to the current function
-                return await fetchScrobbleData(link.href, loadingModal, step);
+                return await fetchScrobbleData(link.href, dateFilters, loadingModal, step);
             }
 
             // no link indicates we're at the scrobble overview
@@ -486,12 +514,17 @@ interface ScrobbleFormControlsCollection extends HTMLFormControlsCollection {
     artist_name_original: HTMLInputElement;
     album_name_original: HTMLInputElement;
     album_artist_name_original: HTMLInputElement;
-    edit_all?: HTMLInputElement;
+    edit_all: HTMLInputElement;
+    edit_range?: HTMLInputElement;
     create_automatic_edit_rule: HTMLInputElement;
 }
 
+interface ScrobbleFormElement extends HTMLFormElement {
+    elements: ScrobbleFormControlsCollection;
+}
+
 // augments the default Edit Scrobble form to include new features
-async function augmentEditScrobbleForm(scrobbleData: FormData[]) {
+async function augmentEditScrobbleForm(scrobbleData: FormData[], dateFilters: URLSearchParams) {
     const loadingModal = createLoadingModal('Waiting for Last.fm...', { dismissible: true });
     let popup: Element;
 
@@ -502,8 +535,7 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[]) {
     }
 
     const title = popup.querySelector<HTMLElement>('.modal-title')!;
-    const form = popup.querySelector<HTMLFormElement>('form[action$="/library/edit?edited-variation=library-track-scrobble"]')!;
-    const elements = form.elements as ScrobbleFormControlsCollection;
+    const form = popup.querySelector<ScrobbleFormElement>('form[action$="/library/edit?edited-variation=library-track-scrobble"]')!;
 
     title.textContent = `Advanced bulk edit`;
 
@@ -513,39 +545,16 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[]) {
         form.removeChild(topBox);
     }
 
-    const track_name_input = elements.track_name;
-    const artist_name_input = elements.artist_name;
-    const album_name_input = elements.album_name;
-    const album_artist_name_input = elements.album_artist_name;
+    // prepare scrobble form inputs
+    const track_name_input = form.elements.track_name;
+    const artist_name_input = form.elements.artist_name;
+    const album_name_input = form.elements.album_name;
+    const album_artist_name_input = form.elements.album_artist_name;
 
-    const tracks = augmentInput(scrobbleData, popup, elements, elements.track_name_original, track_name_input, 'tracks');
-    augmentInput(scrobbleData, popup, elements, elements.artist_name_original, artist_name_input, 'artists');
-    augmentInput(scrobbleData, popup, elements, elements.album_name_original, album_name_input, 'albums');
-    augmentInput(scrobbleData, popup, elements, elements.album_artist_name_original, album_artist_name_input, 'album artists');
-
-    // // add information alert about album artists being kept in sync
-    // if (album_artist_name_input.placeholder === 'Mixed' && scrobbleData.some((s) => s.get('album_artist_name') === artist_name_input.value)) {
-    //     const messageTemplate = document.createElement('template');
-    //     messageTemplate.innerHTML = `
-    //         <div class="form-group-success">
-    //             <div class="alert alert-info">
-    //                 <p>Matching album artists will be kept in sync.</p>
-    //             </div>
-    //         </div>`;
-
-    //     const message = messageTemplate.content.firstElementChild!.cloneNode(true);
-    //     const formGroup = album_artist_name_input.closest('.form-group')!;
-    //     formGroup.parentElement!.insertBefore(message, formGroup.nextElementSibling!.nextElementSibling);
-
-    //     const removeMessage = () => {
-    //         message.parentElement!.removeChild(message);
-    //         album_artist_name_input.removeEventListener('input', removeMessage);
-    //         album_artist_name_input.removeEventListener('keydown', removeMessage);
-    //     }
-
-    //     album_artist_name_input.addEventListener('input', removeMessage);
-    //     album_artist_name_input.addEventListener('keydown', removeMessage);
-    // }
+    augmentInput(scrobbleData, popup, form, form.elements.track_name_original, track_name_input, 'tracks');
+    augmentInput(scrobbleData, popup, form, form.elements.artist_name_original, artist_name_input, 'artists');
+    augmentInput(scrobbleData, popup, form, form.elements.album_name_original, album_name_input, 'albums');
+    augmentInput(scrobbleData, popup, form, form.elements.album_artist_name_original, album_artist_name_input, 'album artists');
 
     // keep album artist name in sync
     let previousValue = artist_name_input.value;
@@ -553,115 +562,110 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[]) {
         if (album_artist_name_input.value === previousValue && album_artist_name_input.placeholder !== 'Mixed') {
             album_artist_name_input.value = artist_name_input.value;
             album_artist_name_input.dispatchEvent(new Event('input'));
+            // TODO: make this work for Mixed album artist too
         }
         previousValue = artist_name_input.value;
     });
 
     // update the "Bulk edit" checkbox
-    if (elements.edit_all) {
-        elements.edit_all.checked = true;
-        elements.edit_all.disabled = true;
-        elements.edit_all.parentElement!.style.cursor = 'auto';
-        elements.edit_all.nextSibling!.textContent = tracks > 1
-            ? `Apply to all (${scrobbleData.length}) past scrobbles of ${tracks} tracks`
-            : elements.edit_all.nextSibling!.textContent!.replace(/\d+/, scrobbleData.length.toString());
+    const edit_all_input = form.elements.edit_all;
+    let edit_range_input: HTMLInputElement | null = null;
+
+    if (dateFilters.size === 0) {
+        edit_all_input.checked = true;
+        edit_all_input.disabled = true;
+        edit_all_input.parentElement!.style.cursor = 'auto';
 
         const hiddenInput = document.createElement('input');
         hiddenInput.type = 'hidden';
-        hiddenInput.name = elements.edit_all.name;
-        hiddenInput.value = elements.edit_all.value;
-        elements.edit_all.parentElement!.insertBefore(hiddenInput, elements.edit_all.nextElementSibling);
-    }
+        hiddenInput.name = edit_all_input.name;
+        hiddenInput.value = edit_all_input.value;
+        edit_all_input.parentElement!.insertBefore(hiddenInput, edit_all_input.nextElementSibling);
+    } else {
+        edit_all_input.type = 'radio';
 
-    // update the "Automatic edit" checkbox
-    if (tracks > 1) {
-        elements.create_automatic_edit_rule.nextSibling!.textContent =
-            `Apply to all future scrobbles of ${tracks} tracks`;
+        const container = edit_all_input.closest('.checkbox')!;
+        container.classList.remove('checkbox');
+        container.classList.add('radio');
+
+        const newRadioTemplate = document.createElement('template');
+        newRadioTemplate.innerHTML = `
+            <div class="radio">
+                <label for="id_edit_range">
+                    <input id="id_edit_range" type="radio" name="edit_all" value="" checked>
+                </label>
+            </div>`;
+
+        const newRadio = newRadioTemplate.content.firstElementChild!.cloneNode(true);
+        container.parentElement!.insertBefore(newRadio, container);
+
+        edit_range_input = form.querySelector('#id_edit_range');
     }
 
     // each exact track, artist, album and album artist combination is considered a distinct scrobble
     const distinctGroups = groupBy(scrobbleData, (s) => JSON.stringify({
         track_name: s.get('track_name'),
         artist_name: s.get('artist_name'),
-        album_name: s.get('album_name') ?? '',
-        album_artist_name: s.get('album_artist_name') ?? '',
-    }));
+        album_name: s.get('album_name'),
+        album_artist_name: s.get('album_artist_name'),
+    }).toLowerCase());
 
     const distinctScrobbleData = [...distinctGroups].map(([_name, values]) => values[0]);
 
-    // disable the submit button when the form has validation errors
+    // set up the form
     const submitButton = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    let formDataToSubmit: FormData[] = [];
+
+    refreshFormState();
+
     form.addEventListener('input', () => {
-        submitButton.disabled = form.querySelector('.has-error') !== null;
+        console.log('input');
+        refreshFormState();
     });
+
+    function refreshFormState() {
+        if (form.querySelector('.has-error') !== null || form.querySelector('.has-success') === null) {
+            formDataToSubmit = [];
+        } else {
+            formDataToSubmit = determineFormDataToSubmit(form, distinctScrobbleData);
+        }
+
+        // refresh the "Bulk edit" checkbox
+        const trackCountText = distinctScrobbleData.length === 1 ? 'this track' : `${formDataToSubmit.length} tracks`;
+        const scrobbleCount = distinctScrobbleData.length === 1
+            ? scrobbleData.length
+            : 0; // TODO: calculate filtered scrobble count
+
+        if (dateFilters.size === 0) {
+            edit_all_input.nextSibling!.textContent =
+                `Apply to all (${scrobbleCount}) past scrobbles of ${trackCountText}`;
+        } else {
+            edit_range_input!.nextSibling!.textContent =
+                `Apply to ${scrobbleCount === 1 ? '1 scrobble' : `${scrobbleCount} scrobbles`} of ${trackCountText} (${document.querySelector('.date-range-picker-button-inner')?.textContent?.trim()})`;
+            edit_all_input.nextSibling!.textContent =
+                `Apply to all scrobbles of ${trackCountText} (All time)`;
+        }
+
+        // refresh the "Automatic edit" checkbox
+        form.elements.create_automatic_edit_rule.nextSibling!.textContent =
+            `Apply to all future scrobbles of ${trackCountText}`;
+
+        // disable the submit button when there is nothing to submit
+        submitButton.disabled = formDataToSubmit.length === 0;
+    }
 
     // set up the form submit event listener
     submitButton.addEventListener('click', async (event: Event) => {
         event.preventDefault();
 
-        const formData = new FormData(form);
-        const formDataToSubmit = [];
-
-        const track_name = getMixedInputValue(track_name_input);
-        const artist_name = getMixedInputValue(artist_name_input);
-        const album_name = getMixedInputValue(album_name_input);
-        const album_artist_name = getMixedInputValue(album_artist_name_input);
-
-        for (const originalData of distinctScrobbleData) {
-            const track_name_original = originalData.get('track_name')!;
-            const artist_name_original = originalData.get('artist_name')!;
-            const album_name_original = originalData.get('album_name') ?? '';
-            const album_artist_name_original = originalData.get('album_artist_name') ?? '';
-
-            // if the album artist field is Mixed, use the old and new artist names to keep the album artist in sync
-            const album_artist_name_sync = album_artist_name_input.placeholder === 'Mixed' && distinctScrobbleData.some((s) => s.get('artist_name') === album_artist_name_original)
-                ? artist_name
-                : album_artist_name;
-
-            // check if anything changed compared to the original track, artist, album and album artist combination
-            if (track_name !== null && track_name !== track_name_original ||
-                artist_name !== null && artist_name !== artist_name_original ||
-                album_name !== null && album_name !== album_name_original ||
-                album_artist_name_sync !== null && album_artist_name_sync !== album_artist_name_original) {
-
-                const clonedFormData = cloneFormData(formData);
-
-                // Last.fm expects a timestamp
-                clonedFormData.set('timestamp', originalData.get('timestamp')!);
-
-                // populate the *_original fields to instruct Last.fm which scrobbles need to be edited
-
-                clonedFormData.set('track_name_original', track_name_original);
-                if (track_name === null) {
-                    clonedFormData.set('track_name', track_name_original);
-                }
-
-                clonedFormData.set('artist_name_original', artist_name_original);
-                if (artist_name === null) {
-                    clonedFormData.set('artist_name', artist_name_original);
-                }
-
-                clonedFormData.set('album_name_original', album_name_original);
-                if (album_name === null) {
-                    clonedFormData.set('album_name', album_name_original);
-                }
-
-                clonedFormData.set('album_artist_name_original', album_artist_name_original);
-                if (album_artist_name_sync === null) {
-                    clonedFormData.set('album_artist_name', album_artist_name_original);
-                } else {
-                    clonedFormData.set('album_artist_name', album_artist_name_sync);
-                }
-
-                clonedFormData.set('ajax', '1');
-
-                formDataToSubmit.push(clonedFormData);
-            }
+        if (formDataToSubmit.length === 0 || submitButton.disabled) {
+            return;
         }
 
-        if (formDataToSubmit.length === 0) {
-            alert('Your edit doesn\'t contain any real changes. We cannot accept casing changes.'); // TODO: pretty validation messages
-            return;
+        // formDataToSubmit is based on distinctScrobbleData by default
+        // use all scrobbleData if Bulk edit is not checked
+        if (!edit_all_input.checked) {
+            formDataToSubmit = determineFormDataToSubmit(form, scrobbleData);
         }
 
         if (formDataToSubmit.length > 1) {
@@ -725,7 +729,7 @@ function observeChildList(target: Node, selector: string) {
 }
 
 // turns a normal input into an input that supports the "Mixed" state
-function augmentInput(scrobbleData: FormData[], popup: Element, inputs: ScrobbleFormControlsCollection, originalInput: HTMLInputElement, input: HTMLInputElement, plural: string) {
+function augmentInput(scrobbleData: FormData[], popup: Element, form: ScrobbleFormElement, originalInput: HTMLInputElement, input: HTMLInputElement, plural: string) {
     const formGroup = input.closest('.form-group')!;
     const inputContainer = document.createElement('div');
     inputContainer.style.width = '100%';
@@ -809,7 +813,7 @@ function augmentInput(scrobbleData: FormData[], popup: Element, inputs: Scrobble
         formGroup.insertBefore(datalist, input.nextElementSibling);
 
         // event listeners
-        function onInput() {
+        const onInput = () => {
             input.placeholder = '';
 
             for (const subInput of subInputs) {
@@ -836,19 +840,23 @@ function augmentInput(scrobbleData: FormData[], popup: Element, inputs: Scrobble
                 refreshInputState();
             });
         }
+    } else {
+        input.addEventListener('input', () => {
+            refreshInputState();
+        });
     }
 
     // display green color when field was edited, red if it's not allowed to be empty
     const defaultValue = input.value;
 
     if (input.name === 'album_name') {
-        inputs.album_artist_name.addEventListener('input', () => {
+        form.elements.album_artist_name.addEventListener('input', () => {
             refreshInputState();
         });
     } else if (input.name === 'album_artist_name') {
-        inputs.album_name.addEventListener('input', () => {
-            if (input.value.trim() === '' && inputs.album_name.value.trim() !== '') {
-                input.value = inputs.artist_name.value;
+        form.elements.album_name.addEventListener('input', () => {
+            if (input.placeholder !== 'Mixed' && input.value.trim() === '' && form.elements.album_name.value.trim() !== '') {
+                input.value = form.elements.artist_name.value;
                 input.placeholder = '';
             }
             refreshInputState();
@@ -863,17 +871,15 @@ function augmentInput(scrobbleData: FormData[], popup: Element, inputs: Scrobble
 
         if ((isEmpty || subInputs.some(x => x.value.trim() === ''))
             && (input.name === 'track_name'
-                || input.name === 'album_name' && (subInputs.length === 0 || isEmpty) && (inputs.album_artist_name.value.trim() !== '' || inputs.album_artist_name.placeholder !== '')
+                || input.name === 'album_name' && (subInputs.length === 0 || isEmpty) && (form.elements.album_artist_name.value.trim() !== '' || form.elements.album_artist_name.placeholder !== '')
                 || input.name === 'artist_name'
-                || input.name === 'album_artist_name' && (inputs.album_name.value.trim() !== '' || inputs.album_name.placeholder !== ''))
+                || input.name === 'album_artist_name' && (form.elements.album_name.value.trim() !== '' || form.elements.album_name.placeholder !== ''))
         ) {
             inputContainer.classList.add('has-error');
-        } else if (input.value !== defaultValue || groups.length >= 2 && input.placeholder !== 'Mixed') {
+        } else if (input.value.toLowerCase() !== defaultValue.toLowerCase() || groups.length >= 2 && input.placeholder !== 'Mixed') {
             inputContainer.classList.add('has-success');
         }
     }
-
-    return groups.length;
 }
 
 function groupBy<K, V>(array: V[], keyFunc: (item: V) => K) {
@@ -890,6 +896,71 @@ function groupBy<K, V>(array: V[], keyFunc: (item: V) => K) {
     }
 
     return map;
+}
+
+function determineFormDataToSubmit(form: ScrobbleFormElement, scrobbleData: FormData[]) {
+    const formData = new FormData(form);
+    const formDataToSubmit = [];
+
+    const track_name = getMixedInputValue(form.elements.track_name);
+    const artist_name = getMixedInputValue(form.elements.artist_name);
+    const album_name = getMixedInputValue(form.elements.album_name);
+    const album_artist_name = getMixedInputValue(form.elements.album_artist_name);
+
+    for (const originalData of scrobbleData) {
+        const track_name_original = originalData.get('track_name')!;
+        const artist_name_original = originalData.get('artist_name')!;
+        const album_name_original = originalData.get('album_name') ?? '';
+        const album_artist_name_original = originalData.get('album_artist_name') ?? '';
+
+        // if the album artist field is Mixed, use the old and new artist names to keep the album artist in sync
+        const album_artist_name_sync = form.elements.album_artist_name.placeholder === 'Mixed' && scrobbleData.some((s) => s.get('artist_name') === album_artist_name_original)
+            ? artist_name
+            : album_artist_name;
+        // TODO: move this sync to form event listeners
+
+        // check if anything changed compared to the original track, artist, album and album artist combination
+        if (track_name !== null && track_name !== track_name_original ||
+            artist_name !== null && artist_name !== artist_name_original ||
+            album_name !== null && album_name !== album_name_original ||
+            album_artist_name_sync !== null && album_artist_name_sync !== album_artist_name_original) {
+
+            const clonedFormData = cloneFormData(formData);
+
+            // Last.fm expects a timestamp
+            clonedFormData.set('timestamp', originalData.get('timestamp')!);
+
+            // populate the *_original fields to instruct Last.fm which scrobbles need to be edited
+
+            clonedFormData.set('track_name_original', track_name_original);
+            if (track_name === null) {
+                clonedFormData.set('track_name', track_name_original);
+            }
+
+            clonedFormData.set('artist_name_original', artist_name_original);
+            if (artist_name === null) {
+                clonedFormData.set('artist_name', artist_name_original);
+            }
+
+            clonedFormData.set('album_name_original', album_name_original);
+            if (album_name === null) {
+                clonedFormData.set('album_name', album_name_original);
+            }
+
+            clonedFormData.set('album_artist_name_original', album_artist_name_original);
+            if (album_artist_name_sync === null) {
+                clonedFormData.set('album_artist_name', album_artist_name_original);
+            } else {
+                clonedFormData.set('album_artist_name', album_artist_name_sync);
+            }
+
+            clonedFormData.set('ajax', '1');
+
+            formDataToSubmit.push(clonedFormData);
+        }
+    }
+
+    return formDataToSubmit;
 }
 
 function getMixedInputValue(input: HTMLInputElement) {
