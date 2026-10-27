@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Advanced (Bulk Edit)
 // @description New and improved features for Last.fm. Advanced bulk edit, and more!
-// @version 2.0.0-alpha.1
+// @version 2.0.0-alpha.2
 // @author RudeySH
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit/tree/v2
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
@@ -730,8 +730,13 @@ function getBulkEditScrobbleMenuItem(url, row) {
             alert(`Last.fm reports you haven't listened to this ${urlType}.`);
             return;
         }
-        // use the first scrobble to trick Last.fm into fetching the Edit Scrobble modal
-        applyFormData(form, scrobbleData[0]);
+        // use a scrobble of the most-played track to trick Last.fm into fetching the Edit Scrobble modal
+        const trackGroups = [...groupBy(scrobbleData, (s) => JSON.stringify({
+                track_name: s.get('track_name'),
+                artist_name: s.get('artist_name'),
+            }).toLowerCase()).values()];
+        const mostPlayedTrackScrobbleData = trackGroups.reduce((a, b) => b.length > a.length ? b : a);
+        applyFormData(form, mostPlayedTrackScrobbleData[0]);
         submitButton.click();
     };
     submitButton.addEventListener('click', async () => {
@@ -917,6 +922,7 @@ function applyFormData(form, formData) {
 }
 // augments the default Edit Scrobble form to include new features
 async function augmentEditScrobbleForm(scrobbleData, dateFilters) {
+    var _a;
     const loadingModal = createLoadingModal('Waiting for Last.fm...', { dismissible: true });
     let popup;
     try {
@@ -952,20 +958,23 @@ async function augmentEditScrobbleForm(scrobbleData, dateFilters) {
         }
         previousValue = artist_name_input.value;
     });
-    // update the "Bulk edit" checkbox
-    const edit_all_input = form.elements.edit_all;
+    // update the "Bulk edit" checkbox, which Last.fm doesn't always render
+    const edit_all_input = (_a = form.elements.edit_all) !== null && _a !== void 0 ? _a : createBulkEditCheckbox(form);
     let edit_range_input = null;
     if (dateFilters.size === 0) {
         edit_all_input.checked = true;
         edit_all_input.disabled = true;
         edit_all_input.parentElement.style.cursor = 'auto';
-        const hiddenInput = document.createElement('input');
-        hiddenInput.type = 'hidden';
-        hiddenInput.name = edit_all_input.name;
-        hiddenInput.value = edit_all_input.value;
-        edit_all_input.parentElement.insertBefore(hiddenInput, edit_all_input.nextElementSibling);
+        if (edit_all_input.name) {
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = edit_all_input.name;
+            hiddenInput.value = edit_all_input.value;
+            edit_all_input.parentElement.insertBefore(hiddenInput, edit_all_input.nextElementSibling);
+        }
     }
     else {
+        edit_all_input.name = 'edit_all';
         edit_all_input.type = 'radio';
         const container = edit_all_input.closest('.checkbox');
         container.classList.remove('checkbox');
@@ -1010,15 +1019,16 @@ async function augmentEditScrobbleForm(scrobbleData, dateFilters) {
         const scrobbleCount = distinctScrobbleData.length === 1
             ? scrobbleData.length
             : 0; // TODO: calculate filtered scrobble count
-        if (dateFilters.size === 0) {
-            edit_all_input.nextSibling.textContent =
-                `Apply to all (${scrobbleCount}) past scrobbles of ${trackCountText}`;
-        }
-        else {
-            edit_range_input.nextSibling.textContent =
-                `Apply to ${scrobbleCount === 1 ? '1 scrobble' : `${scrobbleCount} scrobbles`} of ${trackCountText} (${(_b = (_a = document.querySelector('.date-range-picker-button-inner')) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()})`;
+        const scrobblesText = dateFilters.size === 0
+            ? `Apply to all (${scrobbleCount}) past scrobbles of ${trackCountText}`
+            : `Apply to ${scrobbleCount === 1 ? '1 scrobble' : `${scrobbleCount} scrobbles`} of ${trackCountText} (${(_b = (_a = document.querySelector('.date-range-picker-button-inner')) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()})`;
+        if (edit_range_input) {
+            edit_range_input.nextSibling.textContent = scrobblesText;
             edit_all_input.nextSibling.textContent =
                 `Apply to all scrobbles of ${trackCountText} (All time)`;
+        }
+        else {
+            edit_all_input.nextSibling.textContent = scrobblesText;
         }
         // refresh the "Automatic edit" checkbox
         form.elements.create_automatic_edit_rule.nextSibling.textContent =
@@ -1034,7 +1044,7 @@ async function augmentEditScrobbleForm(scrobbleData, dateFilters) {
         }
         // formDataToSubmit is based on distinctScrobbleData by default
         // use all scrobbleData if Bulk edit is not checked
-        if (!edit_all_input.checked) {
+        if (!new FormData(form).get('edit_all')) {
             formDataToSubmit = determineFormDataToSubmit(form, scrobbleData);
         }
         if (formDataToSubmit.length > 1) {
@@ -1070,6 +1080,24 @@ async function augmentEditScrobbleForm(scrobbleData, dateFilters) {
         setTimeout(() => { window.location.reload(); }, 1000);
     });
 }
+// creates a "Bulk edit" checkbox by cloning the "Automatic edit" checkbox, it won't be submitted without a name
+function createBulkEditCheckbox(form) {
+    const automaticEditInput = form.elements.create_automatic_edit_rule;
+    const automaticEditContainer = automaticEditInput.closest('.checkbox');
+    // shallow clones, so no other elements inside the container get duplicated
+    const container = automaticEditContainer.cloneNode(false);
+    const label = automaticEditInput.parentElement.cloneNode(false);
+    const input = automaticEditInput.cloneNode(false);
+    input.removeAttribute('id');
+    input.removeAttribute('name');
+    input.checked = false;
+    label.removeAttribute('for');
+    // the label text is set later through input.nextSibling
+    label.append(input, document.createTextNode(''));
+    container.append(label);
+    automaticEditContainer.parentElement.insertBefore(container, automaticEditContainer);
+    return input;
+}
 // helper function that completes when a matching element gets appended
 function observeChildList(target, selector) {
     return new Promise((resolve) => {
@@ -1103,6 +1131,7 @@ function augmentInput(scrobbleData, popup, form, originalInput, input, plural) {
         originalInput.placeholder = 'Mixed';
         input.value = '';
         input.placeholder = 'Mixed';
+        input.required = false;
         // remove the "Originally" text that only shows on small screens
         let elementToRemove = formGroup.previousElementSibling;
         while (elementToRemove !== null) {

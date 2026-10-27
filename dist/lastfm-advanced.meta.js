@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Last.fm Advanced (Bulk Edit)
 // @description New and improved features for Last.fm. Advanced bulk edit, and more!
-// @version 2.0.0-alpha.1
+// @version 2.0.0-alpha.2
 // @author RudeySH
 // @homepage https://github.com/RudeySH/lastfm-bulk-edit/tree/v2
 // @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues

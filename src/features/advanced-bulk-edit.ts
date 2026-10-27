@@ -290,8 +290,13 @@ function getBulkEditScrobbleMenuItem(url: string, row?: HTMLTableRowElement) {
             return;
         }
 
-        // use the first scrobble to trick Last.fm into fetching the Edit Scrobble modal
-        applyFormData(form, scrobbleData[0]);
+        // use a scrobble of the most-played track to trick Last.fm into fetching the Edit Scrobble modal
+        const trackGroups = [...groupBy(scrobbleData, (s) => JSON.stringify({
+            track_name: s.get('track_name'),
+            artist_name: s.get('artist_name'),
+        }).toLowerCase()).values()];
+        const mostPlayedTrackScrobbleData = trackGroups.reduce((a, b) => b.length > a.length ? b : a);
+        applyFormData(form, mostPlayedTrackScrobbleData[0]);
 
         submitButton.click();
     };
@@ -514,7 +519,7 @@ interface ScrobbleFormControlsCollection extends HTMLFormControlsCollection {
     artist_name_original: HTMLInputElement;
     album_name_original: HTMLInputElement;
     album_artist_name_original: HTMLInputElement;
-    edit_all: HTMLInputElement;
+    edit_all?: HTMLInputElement;
     edit_range?: HTMLInputElement;
     create_automatic_edit_rule: HTMLInputElement;
 }
@@ -567,8 +572,8 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[], dateFilters: UR
         previousValue = artist_name_input.value;
     });
 
-    // update the "Bulk edit" checkbox
-    const edit_all_input = form.elements.edit_all;
+    // update the "Bulk edit" checkbox, which Last.fm doesn't always render
+    const edit_all_input = form.elements.edit_all ?? createBulkEditCheckbox(form);
     let edit_range_input: HTMLInputElement | null = null;
 
     if (dateFilters.size === 0) {
@@ -576,12 +581,15 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[], dateFilters: UR
         edit_all_input.disabled = true;
         edit_all_input.parentElement!.style.cursor = 'auto';
 
-        const hiddenInput = document.createElement('input');
-        hiddenInput.type = 'hidden';
-        hiddenInput.name = edit_all_input.name;
-        hiddenInput.value = edit_all_input.value;
-        edit_all_input.parentElement!.insertBefore(hiddenInput, edit_all_input.nextElementSibling);
+        if (edit_all_input.name) {
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = edit_all_input.name;
+            hiddenInput.value = edit_all_input.value;
+            edit_all_input.parentElement!.insertBefore(hiddenInput, edit_all_input.nextElementSibling);
+        }
     } else {
+        edit_all_input.name = 'edit_all';
         edit_all_input.type = 'radio';
 
         const container = edit_all_input.closest('.checkbox')!;
@@ -636,14 +644,16 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[], dateFilters: UR
             ? scrobbleData.length
             : 0; // TODO: calculate filtered scrobble count
 
-        if (dateFilters.size === 0) {
-            edit_all_input.nextSibling!.textContent =
-                `Apply to all (${scrobbleCount}) past scrobbles of ${trackCountText}`;
-        } else {
-            edit_range_input!.nextSibling!.textContent =
-                `Apply to ${scrobbleCount === 1 ? '1 scrobble' : `${scrobbleCount} scrobbles`} of ${trackCountText} (${document.querySelector('.date-range-picker-button-inner')?.textContent?.trim()})`;
+        const scrobblesText = dateFilters.size === 0
+            ? `Apply to all (${scrobbleCount}) past scrobbles of ${trackCountText}`
+            : `Apply to ${scrobbleCount === 1 ? '1 scrobble' : `${scrobbleCount} scrobbles`} of ${trackCountText} (${document.querySelector('.date-range-picker-button-inner')?.textContent?.trim()})`;
+
+        if (edit_range_input) {
+            edit_range_input.nextSibling!.textContent = scrobblesText;
             edit_all_input.nextSibling!.textContent =
                 `Apply to all scrobbles of ${trackCountText} (All time)`;
+        } else {
+            edit_all_input.nextSibling!.textContent = scrobblesText;
         }
 
         // refresh the "Automatic edit" checkbox
@@ -664,7 +674,7 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[], dateFilters: UR
 
         // formDataToSubmit is based on distinctScrobbleData by default
         // use all scrobbleData if Bulk edit is not checked
-        if (!edit_all_input.checked) {
+        if (!new FormData(form).get('edit_all')) {
             formDataToSubmit = determineFormDataToSubmit(form, scrobbleData);
         }
 
@@ -709,6 +719,30 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[], dateFilters: UR
     });
 }
 
+// creates a "Bulk edit" checkbox by cloning the "Automatic edit" checkbox, it won't be submitted without a name
+function createBulkEditCheckbox(form: ScrobbleFormElement) {
+    const automaticEditInput = form.elements.create_automatic_edit_rule;
+    const automaticEditContainer = automaticEditInput.closest('.checkbox')!;
+
+    // shallow clones, so no other elements inside the container get duplicated
+    const container = automaticEditContainer.cloneNode(false) as HTMLElement;
+    const label = automaticEditInput.parentElement!.cloneNode(false) as HTMLElement;
+    const input = automaticEditInput.cloneNode(false) as HTMLInputElement;
+
+    input.removeAttribute('id');
+    input.removeAttribute('name');
+    input.checked = false;
+    label.removeAttribute('for');
+
+    // the label text is set later through input.nextSibling
+    label.append(input, document.createTextNode(''));
+    container.append(label);
+
+    automaticEditContainer.parentElement!.insertBefore(container, automaticEditContainer);
+
+    return input;
+}
+
 // helper function that completes when a matching element gets appended
 function observeChildList(target: Node, selector: string) {
     return new Promise<Element>((resolve) => {
@@ -745,6 +779,7 @@ function augmentInput(scrobbleData: FormData[], popup: Element, form: ScrobbleFo
         originalInput.placeholder = 'Mixed';
         input.value = '';
         input.placeholder = 'Mixed';
+        input.required = false;
 
         // remove the "Originally" text that only shows on small screens
         let elementToRemove = formGroup.previousElementSibling;
