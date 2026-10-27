@@ -23,44 +23,55 @@ For all users:
    - [Tampermonkey](https://tampermonkey.net/). Popular but closed source. Supports most browsers.
    - [Violentmonkey](https://violentmonkey.github.io/). Open source. Doesn't support Chrome / Manifest V3.
    - Greasemonkey is currently not supported, see FAQ.
-2. Install this userscript: [Last.fm Advanced](https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/main/dist/lastfm-advanced.user.js).
+2. Install this userscript: [Last.fm Advanced](https://raw.githubusercontent.com/RudeySH/lastfm-advanced/HEAD/dist/lastfm-advanced.user.js).
    - If you're using Tampermonkey, press the "Install" button on the top-left.
    - If you're using Violentmonkey, press the "Confirm installation" button on the left.
 3. Go to your [Last.fm library](https://www.last.fm/user/_/library/artists).
-4. Use the new "Edit scrobbles" menu item like in the examples below.
+4. Use the new "Edit scrobbles (Advanced)" menu item like in the examples below.
 
-To update the installed userscript to the latest version, simply do step 2 again.
+Your userscript manager checks for updates automatically.
+To update the installed userscript manually, simply do step 2 again.
+
+> [!NOTE]
+> Did you install this userscript back when it was called "Last.fm Bulk Edit"?
+> Then uninstall "Last.fm Bulk Edit" from your userscript manager first, and install Last.fm Advanced using step 2.
+> See [What happened to "Last.fm Bulk Edit"?](#what-happened-to-lastfm-bulk-edit) for more information.
 
 
 ## Advanced bulk edit
 
-> [!IMPORTANT]  
+> [!IMPORTANT]
 > Requires [Last.fm Pro](https://www.last.fm/pro).
 
-Go to your any artist, album or track in your [Last.fm library](https://www.last.fm/user/_/library/artists).
+Go to any artist, album or track in your [Last.fm library](https://www.last.fm/user/_/library/artists).
 Use the "Edit scrobbles (Advanced)" button at the top, or open the ⋮ menu to find the "Edit scrobbles (Advanced)" menu item.
 
 ![](img/bulk-edit-scrobbles-buttons.png)
 
 Advanced bulk edit features:
-- Edit all scrobbles from one artist at once (to rename the artist).
+- Edit all scrobbles from one artist at once.
+  For example, to rename the artist, to merge two spellings of the same artist, or to fix album names across all of the artist's tracks.
 - Edit all scrobbles from one or more albums at once.
 - Edit all scrobbles from one track at once, even if the track is scrobbled under multiple albums.
+- Edit only the scrobbles within a date range.
+  Set the date range filter in your library first, then choose whether to edit the scrobbles within that range or all scrobbles.
+- Edit multiple values separately.
+  When a field has multiple values, it shows "Mixed".
+  Expand it to see every value and give each one a new value of its own.
 - Works in combination with automatic edits (built-in feature from Last.fm Pro).
 
 
 ## Improved automatic edits page
 
 Automatic edits is a built-in feature that comes with Last.fm Pro.
-Automatic edits allows you to save track edits, and have them be applied automatically to future scrobbles.
+Automatic edits allows you to save track edits and album edits, and have them be applied automatically to future scrobbles.
 
 Last.fm Advanced improves the [automatic edits page](https://www.last.fm/settings/subscription/automatic-edits) by adding the following features:
 
-- Navigate track edits by selecting the artist name from a drop-down list.
-- Show original track name, original artist name, original album name, and original album artist name.
+- Navigate by selecting a name from a drop-down list.
+  Sort the table by track, album, artist or album artist first, then pick a name to go to the page where it appears.
+- Show the original name of every edited field.
 - Emphasize the fields that have been edited with **bold text**.
-- Load all track edits into a single page (optional).
-  - Click on a column header to sort rows alphabetically by track/artist/album name.
 - Widen the table if the track / artist / album / album artist name is very long, instead of truncating the text with "…".
 
 With Last.fm Advanced, the automatic edits page looks like this:
@@ -95,7 +106,7 @@ In the image above, clicking "24 Jun 2016, 10:52pm" will set the date range filt
 
 ## Examples for advanced bulk edit
 
-> [!NOTE]  
+> [!NOTE]
 > The user interface has changed since these GIFs were recorded.
 
 ### Merging albums, fixing album names, and removing albums
@@ -130,6 +141,8 @@ This GIF also demonstrates that the album artist name is kept in sync when chang
 In this example, the tracks are scrobbled under three album artists: "Ben Prunty", "Ben Prunty Music" and "Lena Raine".
 After renaming the artist field, the tracks are now scrobbled under only two album artists: "Ben Prunty" and "Lena Raine".
 Ben Prunty's tracks on Lena Raine's album continue to be scrobbled with Lena Raine as the album artist, as you would expect.
+Only the album artists that match the old artist name are changed.
+Expand the "Mixed" album artist field to see which album artists will be changed.
 
 ![](img/album-artist-sync.gif)
 
@@ -138,8 +151,8 @@ Ben Prunty's tracks on Lena Raine's album continue to be scrobbled with Lena Rai
 
 ### How do I get in contact with you?
 
-If you have found a bug, or want to propose a feature or improvement, feel free to open a [GitHub issue](https://github.com/RudeySH/lastfm-bulk-edit/issues).
-For general support or discussion, use [GitHub discussions](https://github.com/RudeySH/lastfm-bulk-edit/discussions) or contact me on Discord, you'll find me in the [Last.fm Discord](https://discord.gg/6aTeg3u) (I'm @rudeysh).
+If you have found a bug, or want to propose a feature or improvement, feel free to open a [GitHub issue](https://github.com/RudeySH/lastfm-advanced/issues).
+For general support or discussion, use [GitHub discussions](https://github.com/RudeySH/lastfm-advanced/discussions) or contact me on Discord, you'll find me in the [Last.fm Discord](https://discord.gg/6aTeg3u) (I'm @rudeysh).
 
 
 ### What happened to "Last.fm Bulk Edit"?
@@ -147,6 +160,17 @@ For general support or discussion, use [GitHub discussions](https://github.com/R
 The project has been renamed to Last.fm Advanced.
 When this userscript was first released, bulk edit was the only feature.
 Now it provides more features that aren't necessarily related to scrobble editing.
+The GitHub repository has been renamed from `lastfm-bulk-edit` to `lastfm-advanced` as well.
+
+If you installed the userscript when it was still called "Last.fm Bulk Edit", it will keep working.
+Your userscript manager keeps updating it, and it gets the same features as Last.fm Advanced.
+Its description in your userscript manager will tell you that the installation is outdated.
+
+To switch to Last.fm Advanced:
+1. Open the dashboard of your userscript manager and uninstall "Last.fm Bulk Edit".
+2. Install Last.fm Advanced, see [Installation instructions](#installation-instructions).
+
+Don't keep both installed, otherwise you'll see every button and menu item twice.
 
 
 ### Why did my edit not save properly?
@@ -154,7 +178,7 @@ Now it provides more features that aren't necessarily related to scrobble editin
 There could be many reasons for this.
 Try refreshing the page after a minute.
 Sometimes Last.fm servers are too busy, try again later.
-Keep in mind that it is not possible to change just the upper or lower casing of names, [due to how these are stored in Last.fm's database](https://getsatisfaction.com/lastfm/topics/website-update-12-march-editing-scrobbles-subscriber-feature).
+Keep in mind that it is not possible to change just the upper or lower casing of names, due to how these are stored in Last.fm's database.
 
 
 ### Why do I need a Last.fm Pro subscription to use advanced bulk edit?

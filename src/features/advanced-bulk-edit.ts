@@ -17,7 +17,7 @@ const domParser = new DOMParser();
 
 const bulkEditScrobbleFormTemplate = document.createElement('template');
 bulkEditScrobbleFormTemplate.innerHTML = `
-    <form method="POST" action="${authLink?.getAttribute('href')}/library/edit?edited-variation=library-track-scrobble"
+    <form method="POST" action="${authLink?.getAttribute('href')}/library/edit-track?edited-variation=library-track-scrobble"
           data-edit-scrobble data-bulk-edit-scrobbles>
         <input type="hidden" name="csrfmiddlewaretoken" value="">
         <input type="hidden" name="artist_name" value="">
@@ -27,6 +27,25 @@ bulkEditScrobbleFormTemplate.innerHTML = `
         <input type="hidden" name="timestamp" value="">
         <button type="submit" style="display: none;"></button>
     </form>`;
+
+const bulkEditSectionTemplate = document.createElement('template');
+bulkEditSectionTemplate.innerHTML = `
+    <div>
+        <p class="edit-scrobble-label">Bulk edit</p>
+        <div>
+            <div class="checkbox">
+                <label><input type="checkbox">Apply to all past scrobbles</label>
+            </div>
+        </div>
+    </div>`;
+
+const editRangeRadioTemplate = document.createElement('template');
+editRangeRadioTemplate.innerHTML = `
+    <div class="radio">
+        <label for="id_edit_range">
+            <input id="id_edit_range" type="radio" name="edit_all" value="" checked>
+        </label>
+    </div>`;
 
 function createCollapseListItem(value: string) {
     const template = document.createElement('template');
@@ -173,11 +192,11 @@ function getBulkEditScrobbleMenuItem(url: string, row?: HTMLTableRowElement) {
         scrobbleData = allScrobbleData;
 
         // use JSON strings as album keys to uniquely identify combinations of album + album artists
-        // group scrobbles by album key
+        // group scrobbles by album key, case-insensitively because Last.fm doesn't distinguish casings
         let scrobbleDataGroups = [...groupBy(allScrobbleData, (s) => JSON.stringify({
             album_name: s.get('album_name') ?? '',
             album_artist_name: s.get('album_artist_name') ?? '',
-        }))];
+        }).toLowerCase())];
 
         // sort groups by the amount of scrobbles
         scrobbleDataGroups = scrobbleDataGroups.sort(([_key1, values1], [_key2, values2]) => values2.length - values1.length);
@@ -203,7 +222,7 @@ function getBulkEditScrobbleMenuItem(url: string, row?: HTMLTableRowElement) {
                 const album_artist_name = (urlType === 'album' && row
                     ? row.querySelector('.chartlist-artist') || document.querySelector('.library-header-title, .library-header-crumb')
                     : document.querySelector('.text-colour-link'))!.textContent!.trim();
-                currentAlbumKey = JSON.stringify({ album_name, album_artist_name });
+                currentAlbumKey = JSON.stringify({ album_name, album_artist_name }).toLowerCase();
 
                 // put the current album first
                 scrobbleDataGroups = scrobbleDataGroups.sort(([key1], [key2]) => {
@@ -540,7 +559,7 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[], dateFilters: UR
     }
 
     const title = popup.querySelector<HTMLElement>('.modal-title')!;
-    const form = popup.querySelector<ScrobbleFormElement>('form[action$="/library/edit?edited-variation=library-track-scrobble"]')!;
+    const form = popup.querySelector<ScrobbleFormElement>('form[action$="/library/edit-track?edited-variation=library-track-scrobble"]')!;
 
     title.textContent = `Advanced bulk edit`;
 
@@ -561,16 +580,47 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[], dateFilters: UR
     augmentInput(scrobbleData, popup, form, form.elements.album_name_original, album_name_input, 'albums');
     augmentInput(scrobbleData, popup, form, form.elements.album_artist_name_original, album_artist_name_input, 'album artists');
 
-    // keep album artist name in sync
-    let previousValue = artist_name_input.value;
-    artist_name_input.addEventListener('input', () => {
-        if (album_artist_name_input.value === previousValue && album_artist_name_input.placeholder !== 'Mixed') {
-            album_artist_name_input.value = artist_name_input.value;
-            album_artist_name_input.dispatchEvent(new Event('input'));
-            // TODO: make this work for Mixed album artist too
+    // keep album artist names in sync with the artist names they're equal to
+    const originalArtistNames = [...new Set(scrobbleData.map((s) => s.get('artist_name') as string))];
+
+    const getArtistNames = () => {
+        const mapArtistName = createValueMapper(form, artist_name_input);
+        return new Map(originalArtistNames.map((name) => [name, mapArtistName(name) ?? name]));
+    };
+
+    let previousArtistNames = getArtistNames();
+
+    const syncAlbumArtistNames = () => {
+        const artistNames = getArtistNames();
+
+        for (const [originalName, name] of artistNames) {
+            const previousName = previousArtistNames.get(originalName)!;
+
+            if (name.toLowerCase() === previousName.toLowerCase()) {
+                continue;
+            }
+
+            if (album_artist_name_input.placeholder.startsWith('Mixed')) {
+                for (const subInput of getSubInputs(form, album_artist_name_input)) {
+                    if (subInput.value.toLowerCase() === previousName.toLowerCase()) {
+                        subInput.value = name;
+                        subInput.dispatchEvent(new Event('input'));
+                    }
+                }
+            } else if (album_artist_name_input.value.toLowerCase() === previousName.toLowerCase()) {
+                album_artist_name_input.value = name;
+                album_artist_name_input.dispatchEvent(new Event('input'));
+            }
         }
-        previousValue = artist_name_input.value;
-    });
+
+        previousArtistNames = artistNames;
+    };
+
+    artist_name_input.addEventListener('input', syncAlbumArtistNames);
+
+    for (const subInput of getSubInputs(form, artist_name_input)) {
+        subInput.addEventListener('input', syncAlbumArtistNames);
+    }
 
     // update the "Bulk edit" checkbox, which Last.fm doesn't always render
     const edit_all_input = form.elements.edit_all ?? createBulkEditCheckbox(form);
@@ -596,15 +646,7 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[], dateFilters: UR
         container.classList.remove('checkbox');
         container.classList.add('radio');
 
-        const newRadioTemplate = document.createElement('template');
-        newRadioTemplate.innerHTML = `
-            <div class="radio">
-                <label for="id_edit_range">
-                    <input id="id_edit_range" type="radio" name="edit_all" value="" checked>
-                </label>
-            </div>`;
-
-        const newRadio = newRadioTemplate.content.firstElementChild!.cloneNode(true);
+        const newRadio = editRangeRadioTemplate.content.firstElementChild!.cloneNode(true);
         container.parentElement!.insertBefore(newRadio, container);
 
         edit_range_input = form.querySelector('#id_edit_range');
@@ -618,8 +660,6 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[], dateFilters: UR
         album_artist_name: s.get('album_artist_name'),
     }).toLowerCase());
 
-    const distinctScrobbleData = [...distinctGroups].map(([_name, values]) => values[0]);
-
     // set up the form
     const submitButton = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
     let formDataToSubmit: FormData[] = [];
@@ -632,17 +672,27 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[], dateFilters: UR
     });
 
     function refreshFormState() {
-        if (form.querySelector('.has-error') !== null || form.querySelector('.has-success') === null) {
-            formDataToSubmit = [];
-        } else {
-            formDataToSubmit = determineFormDataToSubmit(form, distinctScrobbleData);
+        formDataToSubmit = [];
+        let changedScrobbleCount = 0;
+
+        if (form.querySelector('.has-error') === null && form.querySelector('.has-success') !== null) {
+            const editScrobble = createScrobbleEditor(form);
+
+            for (const values of distinctGroups.values()) {
+                const formData = editScrobble(values[0]);
+
+                if (formData !== null) {
+                    formDataToSubmit.push(formData);
+                    changedScrobbleCount += values.length;
+                }
+            }
         }
 
         // refresh the "Bulk edit" checkbox
-        const trackCountText = distinctScrobbleData.length === 1 ? 'this track' : `${formDataToSubmit.length} tracks`;
-        const scrobbleCount = distinctScrobbleData.length === 1
+        const trackCountText = distinctGroups.size === 1 ? 'this track' : `${formDataToSubmit.length} tracks`;
+        const scrobbleCount = distinctGroups.size === 1
             ? scrobbleData.length
-            : 0; // TODO: calculate filtered scrobble count
+            : changedScrobbleCount;
 
         const scrobblesText = dateFilters.size === 0
             ? `Apply to all (${scrobbleCount}) past scrobbles of ${trackCountText}`
@@ -672,7 +722,7 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[], dateFilters: UR
             return;
         }
 
-        // formDataToSubmit is based on distinctScrobbleData by default
+        // formDataToSubmit is based on one scrobble per distinct group by default
         // use all scrobbleData if Bulk edit is not checked
         if (!new FormData(form).get('edit_all')) {
             formDataToSubmit = determineFormDataToSubmit(form, scrobbleData);
@@ -680,7 +730,7 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[], dateFilters: UR
 
         if (formDataToSubmit.length > 1) {
             for (const element of form.elements) {
-                if (element instanceof HTMLInputElement && element.dataset['confirm'] && element.placeholder !== 'Mixed') {
+                if (element instanceof HTMLInputElement && element.dataset['confirm'] && isMerging(form, element)) {
                     if (!confirm(element.dataset['confirm'])) {
                         return; // stop submit
                     }
@@ -719,28 +769,14 @@ async function augmentEditScrobbleForm(scrobbleData: FormData[], dateFilters: UR
     });
 }
 
-// creates a "Bulk edit" checkbox by cloning the "Automatic edit" checkbox, it won't be submitted without a name
+// creates a "Bulk edit" section like the one Last.fm renders, placed above the "Automatic edit" section
 function createBulkEditCheckbox(form: ScrobbleFormElement) {
-    const automaticEditInput = form.elements.create_automatic_edit_rule;
-    const automaticEditContainer = automaticEditInput.closest('.checkbox')!;
+    const automaticEditSection = form.elements.create_automatic_edit_rule.closest('.edit-scrobble-form > div')!;
 
-    // shallow clones, so no other elements inside the container get duplicated
-    const container = automaticEditContainer.cloneNode(false) as HTMLElement;
-    const label = automaticEditInput.parentElement!.cloneNode(false) as HTMLElement;
-    const input = automaticEditInput.cloneNode(false) as HTMLInputElement;
+    const section = bulkEditSectionTemplate.content.firstElementChild!.cloneNode(true) as HTMLElement;
+    automaticEditSection.parentElement!.insertBefore(section, automaticEditSection);
 
-    input.removeAttribute('id');
-    input.removeAttribute('name');
-    input.checked = false;
-    label.removeAttribute('for');
-
-    // the label text is set later through input.nextSibling
-    label.append(input, document.createTextNode(''));
-    container.append(label);
-
-    automaticEditContainer.parentElement!.insertBefore(container, automaticEditContainer);
-
-    return input;
+    return section.querySelector('input')!;
 }
 
 // helper function that completes when a matching element gets appended
@@ -770,7 +806,10 @@ function augmentInput(scrobbleData: FormData[], popup: Element, form: ScrobbleFo
     input.insertAdjacentElement('afterend', inputContainer);
     inputContainer.appendChild(input);
 
-    const groups = [...groupBy(scrobbleData, (s) => s.get(input.name))].sort((a, b) => b[1].length - a[1].length);
+    // group values case-insensitively because Last.fm doesn't distinguish casings, and display each group's most common casing
+    const groups = [...groupBy(scrobbleData, (s) => (s.get(input.name) as string | null)?.toLowerCase() ?? null).values()]
+        .map((values) => [getMostCommonValue(values.map((s) => s.get(input.name) as string | null)), values] as const)
+        .sort((a, b) => b[1].length - a[1].length);
     const subInputs: HTMLInputElement[] = [];
 
     if (groups.length >= 2) {
@@ -815,7 +854,11 @@ function augmentInput(scrobbleData: FormData[], popup: Element, form: ScrobbleFo
         for (const [key] of groups) {
             const listItem = createCollapseListItem(key?.toString() ?? '');
             collapseContainer.appendChild(listItem);
-            subInputs.push(listItem.querySelector('input')!);
+
+            const subInput = listItem.querySelector('input')!;
+            subInput.dataset['mixedFor'] = input.name;
+            subInput.dataset['original'] = key?.toString() ?? '';
+            subInputs.push(subInput);
         }
 
         collapseButton.addEventListener('click', () => {
@@ -870,8 +913,11 @@ function augmentInput(scrobbleData: FormData[], popup: Element, form: ScrobbleFo
 
         for (const subInput of subInputs) {
             subInput.addEventListener('input', () => {
+                // go back to the untouched "Mixed" state when every sub-input is reverted to its original value
+                const isChanged = subInputs.some((x) => x.value.toLowerCase() !== x.dataset['original']!.toLowerCase());
+
                 input.value = '';
-                input.placeholder = 'Mixed (changed)';
+                input.placeholder = isChanged ? 'Mixed (changed)' : 'Mixed';
                 refreshInputState();
             });
         }
@@ -933,73 +979,110 @@ function groupBy<K, V>(array: V[], keyFunc: (item: V) => K) {
     return map;
 }
 
-function determineFormDataToSubmit(form: ScrobbleFormElement, scrobbleData: FormData[]) {
-    const formData = new FormData(form);
-    const formDataToSubmit = [];
-
-    const track_name = getMixedInputValue(form.elements.track_name);
-    const artist_name = getMixedInputValue(form.elements.artist_name);
-    const album_name = getMixedInputValue(form.elements.album_name);
-    const album_artist_name = getMixedInputValue(form.elements.album_artist_name);
-
-    for (const originalData of scrobbleData) {
-        const track_name_original = originalData.get('track_name')!;
-        const artist_name_original = originalData.get('artist_name')!;
-        const album_name_original = originalData.get('album_name') ?? '';
-        const album_artist_name_original = originalData.get('album_artist_name') ?? '';
-
-        // if the album artist field is Mixed, use the old and new artist names to keep the album artist in sync
-        const album_artist_name_sync = form.elements.album_artist_name.placeholder === 'Mixed' && scrobbleData.some((s) => s.get('artist_name') === album_artist_name_original)
-            ? artist_name
-            : album_artist_name;
-        // TODO: move this sync to form event listeners
-
-        // check if anything changed compared to the original track, artist, album and album artist combination
-        if (track_name !== null && track_name !== track_name_original ||
-            artist_name !== null && artist_name !== artist_name_original ||
-            album_name !== null && album_name !== album_name_original ||
-            album_artist_name_sync !== null && album_artist_name_sync !== album_artist_name_original) {
-
-            const clonedFormData = cloneFormData(formData);
-
-            // Last.fm expects a timestamp
-            clonedFormData.set('timestamp', originalData.get('timestamp')!);
-
-            // populate the *_original fields to instruct Last.fm which scrobbles need to be edited
-
-            clonedFormData.set('track_name_original', track_name_original);
-            if (track_name === null) {
-                clonedFormData.set('track_name', track_name_original);
-            }
-
-            clonedFormData.set('artist_name_original', artist_name_original);
-            if (artist_name === null) {
-                clonedFormData.set('artist_name', artist_name_original);
-            }
-
-            clonedFormData.set('album_name_original', album_name_original);
-            if (album_name === null) {
-                clonedFormData.set('album_name', album_name_original);
-            }
-
-            clonedFormData.set('album_artist_name_original', album_artist_name_original);
-            if (album_artist_name_sync === null) {
-                clonedFormData.set('album_artist_name', album_artist_name_original);
-            } else {
-                clonedFormData.set('album_artist_name', album_artist_name_sync);
-            }
-
-            clonedFormData.set('ajax', '1');
-
-            formDataToSubmit.push(clonedFormData);
-        }
-    }
-
-    return formDataToSubmit;
+function getMostCommonValue<T>(values: T[]) {
+    return [...groupBy(values, (value) => value)].sort((a, b) => b[1].length - a[1].length)[0][0];
 }
 
-function getMixedInputValue(input: HTMLInputElement) {
-    return input.placeholder !== 'Mixed' ? input.value : null;
+function determineFormDataToSubmit(form: ScrobbleFormElement, scrobbleData: FormData[]) {
+    const editScrobble = createScrobbleEditor(form);
+
+    return scrobbleData
+        .map(editScrobble)
+        .filter((formData): formData is FormData => formData !== null);
+}
+
+// returns a function that creates the form data to submit for a scrobble, or null if the scrobble wouldn't change
+function createScrobbleEditor(form: ScrobbleFormElement) {
+    const formData = new FormData(form);
+
+    const mapTrackName = createValueMapper(form, form.elements.track_name);
+    const mapArtistName = createValueMapper(form, form.elements.artist_name);
+    const mapAlbumName = createValueMapper(form, form.elements.album_name);
+    const mapAlbumArtistName = createValueMapper(form, form.elements.album_artist_name);
+
+    return (originalData: FormData) => {
+        const track_name_original = originalData.get('track_name') as string;
+        const artist_name_original = originalData.get('artist_name') as string;
+        const album_name_original = (originalData.get('album_name') ?? '') as string;
+        const album_artist_name_original = (originalData.get('album_artist_name') ?? '') as string;
+
+        const track_name = mapTrackName(track_name_original) ?? track_name_original;
+        const artist_name = mapArtistName(artist_name_original) ?? artist_name_original;
+        const album_name = mapAlbumName(album_name_original) ?? album_name_original;
+        const album_artist_name = mapAlbumArtistName(album_artist_name_original) ?? album_artist_name_original;
+
+        // check if anything changed compared to the original track, artist, album and album artist combination
+        // Last.fm doesn't accept case-only changes, so those don't count, but the entered casing is still submitted
+        if (track_name.toLowerCase() === track_name_original.toLowerCase() &&
+            artist_name.toLowerCase() === artist_name_original.toLowerCase() &&
+            album_name.toLowerCase() === album_name_original.toLowerCase() &&
+            album_artist_name.toLowerCase() === album_artist_name_original.toLowerCase()) {
+            return null;
+        }
+
+        const clonedFormData = cloneFormData(formData);
+
+        // Last.fm expects a timestamp
+        clonedFormData.set('timestamp', originalData.get('timestamp')!);
+
+        // populate the *_original fields to instruct Last.fm which scrobbles need to be edited
+        clonedFormData.set('track_name_original', track_name_original);
+        clonedFormData.set('track_name', track_name);
+        clonedFormData.set('artist_name_original', artist_name_original);
+        clonedFormData.set('artist_name', artist_name);
+        clonedFormData.set('album_name_original', album_name_original);
+        clonedFormData.set('album_name', album_name);
+        clonedFormData.set('album_artist_name_original', album_artist_name_original);
+        clonedFormData.set('album_artist_name', album_artist_name);
+
+        clonedFormData.set('ajax', '1');
+
+        return clonedFormData;
+    };
+}
+
+// returns a function that maps an original value to its new value, or to null if the input was left untouched
+// untouched inputs keep each scrobble's original casing, instead of the casing the input happens to display
+function createValueMapper(form: ScrobbleFormElement, input: HTMLInputElement): (originalValue: string) => string | null {
+    if (input.placeholder === 'Mixed') {
+        return () => null;
+    }
+
+    const subInputs = getSubInputs(form, input);
+
+    if (input.placeholder === 'Mixed (changed)') {
+        // each edited sub-input holds the new value for one of the original values
+        const newValues = new Map(subInputs
+            .filter((subInput) => subInput.value !== subInput.dataset['original'])
+            .map((subInput) => [subInput.dataset['original']!.toLowerCase(), subInput.value]));
+        return (originalValue) => newValues.get(originalValue.toLowerCase()) ?? null;
+    }
+
+    if (subInputs.length === 0 && input.value === input.defaultValue) {
+        return () => null;
+    }
+
+    const value = input.value;
+    return () => value;
+}
+
+// sub-inputs are the inputs listed under a Mixed input, one per original value
+function getSubInputs(form: ScrobbleFormElement, input: HTMLInputElement) {
+    return [...form.querySelectorAll<HTMLInputElement>(`input[data-mixed-for="${input.name}"]`)];
+}
+
+// a Mixed input merges scrobbles when it maps two or more original values to the same new value
+function isMerging(form: ScrobbleFormElement, input: HTMLInputElement) {
+    if (input.placeholder === 'Mixed') {
+        return false;
+    }
+
+    if (input.placeholder === 'Mixed (changed)') {
+        const newValues = getSubInputs(form, input).map((subInput) => subInput.value);
+        return new Set(newValues.map((value) => value.toLowerCase())).size < newValues.length;
+    }
+
+    return true;
 }
 
 function cloneFormData(formData: FormData) {

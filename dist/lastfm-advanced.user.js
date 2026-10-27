@@ -1,18 +1,18 @@
 // ==UserScript==
 // @name Last.fm Advanced (Bulk Edit)
 // @description New and improved features for Last.fm. Advanced bulk edit, and more!
-// @version 2.0.0-alpha.2
-// @author RudeySH
-// @homepage https://github.com/RudeySH/lastfm-bulk-edit/tree/v2
-// @supportURL https://github.com/RudeySH/lastfm-bulk-edit/issues
+// @version 2.0.0
+// @author Rudey
+// @homepage https://github.com/RudeySH/lastfm-advanced
+// @supportURL https://github.com/RudeySH/lastfm-advanced/issues
 // @match https://www.last.fm/*
-// @downloadURL https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/refs/heads/v2/dist/lastfm-advanced.user.js
+// @downloadURL https://raw.githubusercontent.com/RudeySH/lastfm-advanced/HEAD/dist/lastfm-advanced.user.js
 // @grant none
-// @icon https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/refs/heads/v2/img/icon.png
+// @icon https://raw.githubusercontent.com/RudeySH/lastfm-advanced/HEAD/img/icon.png
 // @license AGPL-3.0-or-later
-// @namespace https://github.com/RudeySH/lastfm-bulk-edit
+// @namespace https://github.com/RudeySH/lastfm-advanced
 // @require https://cdnjs.cloudflare.com/ajax/libs/he/1.2.0/he.min.js
-// @updateURL https://raw.githubusercontent.com/RudeySH/lastfm-bulk-edit/refs/heads/v2/dist/lastfm-advanced.meta.js
+// @updateURL https://raw.githubusercontent.com/RudeySH/lastfm-advanced/HEAD/dist/lastfm-advanced.meta.js
 // ==/UserScript==
 
 /******/ (() => { // webpackBootstrap
@@ -491,7 +491,7 @@ const artistRegExp = new RegExp(`^${authLink === null || authLink === void 0 ? v
 const domParser = new DOMParser();
 const bulkEditScrobbleFormTemplate = document.createElement('template');
 bulkEditScrobbleFormTemplate.innerHTML = `
-    <form method="POST" action="${authLink === null || authLink === void 0 ? void 0 : authLink.getAttribute('href')}/library/edit?edited-variation=library-track-scrobble"
+    <form method="POST" action="${authLink === null || authLink === void 0 ? void 0 : authLink.getAttribute('href')}/library/edit-track?edited-variation=library-track-scrobble"
           data-edit-scrobble data-bulk-edit-scrobbles>
         <input type="hidden" name="csrfmiddlewaretoken" value="">
         <input type="hidden" name="artist_name" value="">
@@ -501,6 +501,23 @@ bulkEditScrobbleFormTemplate.innerHTML = `
         <input type="hidden" name="timestamp" value="">
         <button type="submit" style="display: none;"></button>
     </form>`;
+const bulkEditSectionTemplate = document.createElement('template');
+bulkEditSectionTemplate.innerHTML = `
+    <div>
+        <p class="edit-scrobble-label">Bulk edit</p>
+        <div>
+            <div class="checkbox">
+                <label><input type="checkbox">Apply to all past scrobbles</label>
+            </div>
+        </div>
+    </div>`;
+const editRangeRadioTemplate = document.createElement('template');
+editRangeRadioTemplate.innerHTML = `
+    <div class="radio">
+        <label for="id_edit_range">
+            <input id="id_edit_range" type="radio" name="edit_all" value="" checked>
+        </label>
+    </div>`;
 function createCollapseListItem(value) {
     const template = document.createElement('template');
     template.innerHTML = `
@@ -617,13 +634,13 @@ function getBulkEditScrobbleMenuItem(url, row) {
         }
         scrobbleData = allScrobbleData;
         // use JSON strings as album keys to uniquely identify combinations of album + album artists
-        // group scrobbles by album key
+        // group scrobbles by album key, case-insensitively because Last.fm doesn't distinguish casings
         let scrobbleDataGroups = [...groupBy(allScrobbleData, (s) => {
                 var _a, _b;
                 return JSON.stringify({
                     album_name: (_a = s.get('album_name')) !== null && _a !== void 0 ? _a : '',
                     album_artist_name: (_b = s.get('album_artist_name')) !== null && _b !== void 0 ? _b : '',
-                });
+                }).toLowerCase();
             })];
         // sort groups by the amount of scrobbles
         scrobbleDataGroups = scrobbleDataGroups.sort(([_key1, values1], [_key2, values2]) => values2.length - values1.length);
@@ -648,7 +665,7 @@ function getBulkEditScrobbleMenuItem(url, row) {
                 const album_artist_name = (urlType === 'album' && row
                     ? row.querySelector('.chartlist-artist') || document.querySelector('.library-header-title, .library-header-crumb')
                     : document.querySelector('.text-colour-link')).textContent.trim();
-                currentAlbumKey = JSON.stringify({ album_name, album_artist_name });
+                currentAlbumKey = JSON.stringify({ album_name, album_artist_name }).toLowerCase();
                 // put the current album first
                 scrobbleDataGroups = scrobbleDataGroups.sort(([key1], [key2]) => {
                     if (key1 === currentAlbumKey)
@@ -932,7 +949,7 @@ async function augmentEditScrobbleForm(scrobbleData, dateFilters) {
         loadingModal.hide();
     }
     const title = popup.querySelector('.modal-title');
-    const form = popup.querySelector('form[action$="/library/edit?edited-variation=library-track-scrobble"]');
+    const form = popup.querySelector('form[action$="/library/edit-track?edited-variation=library-track-scrobble"]');
     title.textContent = `Advanced bulk edit`;
     // remove traces of the first scrobble that was used to initialize the form
     const topBox = form.querySelector('.edit-scrobble-top-box');
@@ -948,16 +965,39 @@ async function augmentEditScrobbleForm(scrobbleData, dateFilters) {
     augmentInput(scrobbleData, popup, form, form.elements.artist_name_original, artist_name_input, 'artists');
     augmentInput(scrobbleData, popup, form, form.elements.album_name_original, album_name_input, 'albums');
     augmentInput(scrobbleData, popup, form, form.elements.album_artist_name_original, album_artist_name_input, 'album artists');
-    // keep album artist name in sync
-    let previousValue = artist_name_input.value;
-    artist_name_input.addEventListener('input', () => {
-        if (album_artist_name_input.value === previousValue && album_artist_name_input.placeholder !== 'Mixed') {
-            album_artist_name_input.value = artist_name_input.value;
-            album_artist_name_input.dispatchEvent(new Event('input'));
-            // TODO: make this work for Mixed album artist too
+    // keep album artist names in sync with the artist names they're equal to
+    const originalArtistNames = [...new Set(scrobbleData.map((s) => s.get('artist_name')))];
+    const getArtistNames = () => {
+        const mapArtistName = createValueMapper(form, artist_name_input);
+        return new Map(originalArtistNames.map((name) => { var _a; return [name, (_a = mapArtistName(name)) !== null && _a !== void 0 ? _a : name]; }));
+    };
+    let previousArtistNames = getArtistNames();
+    const syncAlbumArtistNames = () => {
+        const artistNames = getArtistNames();
+        for (const [originalName, name] of artistNames) {
+            const previousName = previousArtistNames.get(originalName);
+            if (name.toLowerCase() === previousName.toLowerCase()) {
+                continue;
+            }
+            if (album_artist_name_input.placeholder.startsWith('Mixed')) {
+                for (const subInput of getSubInputs(form, album_artist_name_input)) {
+                    if (subInput.value.toLowerCase() === previousName.toLowerCase()) {
+                        subInput.value = name;
+                        subInput.dispatchEvent(new Event('input'));
+                    }
+                }
+            }
+            else if (album_artist_name_input.value.toLowerCase() === previousName.toLowerCase()) {
+                album_artist_name_input.value = name;
+                album_artist_name_input.dispatchEvent(new Event('input'));
+            }
         }
-        previousValue = artist_name_input.value;
-    });
+        previousArtistNames = artistNames;
+    };
+    artist_name_input.addEventListener('input', syncAlbumArtistNames);
+    for (const subInput of getSubInputs(form, artist_name_input)) {
+        subInput.addEventListener('input', syncAlbumArtistNames);
+    }
     // update the "Bulk edit" checkbox, which Last.fm doesn't always render
     const edit_all_input = (_a = form.elements.edit_all) !== null && _a !== void 0 ? _a : createBulkEditCheckbox(form);
     let edit_range_input = null;
@@ -979,14 +1019,7 @@ async function augmentEditScrobbleForm(scrobbleData, dateFilters) {
         const container = edit_all_input.closest('.checkbox');
         container.classList.remove('checkbox');
         container.classList.add('radio');
-        const newRadioTemplate = document.createElement('template');
-        newRadioTemplate.innerHTML = `
-            <div class="radio">
-                <label for="id_edit_range">
-                    <input id="id_edit_range" type="radio" name="edit_all" value="" checked>
-                </label>
-            </div>`;
-        const newRadio = newRadioTemplate.content.firstElementChild.cloneNode(true);
+        const newRadio = editRangeRadioTemplate.content.firstElementChild.cloneNode(true);
         container.parentElement.insertBefore(newRadio, container);
         edit_range_input = form.querySelector('#id_edit_range');
     }
@@ -997,7 +1030,6 @@ async function augmentEditScrobbleForm(scrobbleData, dateFilters) {
         album_name: s.get('album_name'),
         album_artist_name: s.get('album_artist_name'),
     }).toLowerCase());
-    const distinctScrobbleData = [...distinctGroups].map(([_name, values]) => values[0]);
     // set up the form
     const submitButton = form.querySelector('button[type="submit"]');
     let formDataToSubmit = [];
@@ -1008,17 +1040,23 @@ async function augmentEditScrobbleForm(scrobbleData, dateFilters) {
     });
     function refreshFormState() {
         var _a, _b;
-        if (form.querySelector('.has-error') !== null || form.querySelector('.has-success') === null) {
-            formDataToSubmit = [];
-        }
-        else {
-            formDataToSubmit = determineFormDataToSubmit(form, distinctScrobbleData);
+        formDataToSubmit = [];
+        let changedScrobbleCount = 0;
+        if (form.querySelector('.has-error') === null && form.querySelector('.has-success') !== null) {
+            const editScrobble = createScrobbleEditor(form);
+            for (const values of distinctGroups.values()) {
+                const formData = editScrobble(values[0]);
+                if (formData !== null) {
+                    formDataToSubmit.push(formData);
+                    changedScrobbleCount += values.length;
+                }
+            }
         }
         // refresh the "Bulk edit" checkbox
-        const trackCountText = distinctScrobbleData.length === 1 ? 'this track' : `${formDataToSubmit.length} tracks`;
-        const scrobbleCount = distinctScrobbleData.length === 1
+        const trackCountText = distinctGroups.size === 1 ? 'this track' : `${formDataToSubmit.length} tracks`;
+        const scrobbleCount = distinctGroups.size === 1
             ? scrobbleData.length
-            : 0; // TODO: calculate filtered scrobble count
+            : changedScrobbleCount;
         const scrobblesText = dateFilters.size === 0
             ? `Apply to all (${scrobbleCount}) past scrobbles of ${trackCountText}`
             : `Apply to ${scrobbleCount === 1 ? '1 scrobble' : `${scrobbleCount} scrobbles`} of ${trackCountText} (${(_b = (_a = document.querySelector('.date-range-picker-button-inner')) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()})`;
@@ -1042,14 +1080,14 @@ async function augmentEditScrobbleForm(scrobbleData, dateFilters) {
         if (formDataToSubmit.length === 0 || submitButton.disabled) {
             return;
         }
-        // formDataToSubmit is based on distinctScrobbleData by default
+        // formDataToSubmit is based on one scrobble per distinct group by default
         // use all scrobbleData if Bulk edit is not checked
         if (!new FormData(form).get('edit_all')) {
             formDataToSubmit = determineFormDataToSubmit(form, scrobbleData);
         }
         if (formDataToSubmit.length > 1) {
             for (const element of form.elements) {
-                if (element instanceof HTMLInputElement && element.dataset['confirm'] && element.placeholder !== 'Mixed') {
+                if (element instanceof HTMLInputElement && element.dataset['confirm'] && isMerging(form, element)) {
                     if (!confirm(element.dataset['confirm'])) {
                         return; // stop submit
                     }
@@ -1080,23 +1118,12 @@ async function augmentEditScrobbleForm(scrobbleData, dateFilters) {
         setTimeout(() => { window.location.reload(); }, 1000);
     });
 }
-// creates a "Bulk edit" checkbox by cloning the "Automatic edit" checkbox, it won't be submitted without a name
+// creates a "Bulk edit" section like the one Last.fm renders, placed above the "Automatic edit" section
 function createBulkEditCheckbox(form) {
-    const automaticEditInput = form.elements.create_automatic_edit_rule;
-    const automaticEditContainer = automaticEditInput.closest('.checkbox');
-    // shallow clones, so no other elements inside the container get duplicated
-    const container = automaticEditContainer.cloneNode(false);
-    const label = automaticEditInput.parentElement.cloneNode(false);
-    const input = automaticEditInput.cloneNode(false);
-    input.removeAttribute('id');
-    input.removeAttribute('name');
-    input.checked = false;
-    label.removeAttribute('for');
-    // the label text is set later through input.nextSibling
-    label.append(input, document.createTextNode(''));
-    container.append(label);
-    automaticEditContainer.parentElement.insertBefore(container, automaticEditContainer);
-    return input;
+    const automaticEditSection = form.elements.create_automatic_edit_rule.closest('.edit-scrobble-form > div');
+    const section = bulkEditSectionTemplate.content.firstElementChild.cloneNode(true);
+    automaticEditSection.parentElement.insertBefore(section, automaticEditSection);
+    return section.querySelector('input');
 }
 // helper function that completes when a matching element gets appended
 function observeChildList(target, selector) {
@@ -1117,13 +1144,16 @@ function observeChildList(target, selector) {
 }
 // turns a normal input into an input that supports the "Mixed" state
 function augmentInput(scrobbleData, popup, form, originalInput, input, plural) {
-    var _a, _b;
+    var _a, _b, _c;
     const formGroup = input.closest('.form-group');
     const inputContainer = document.createElement('div');
     inputContainer.style.width = '100%';
     input.insertAdjacentElement('afterend', inputContainer);
     inputContainer.appendChild(input);
-    const groups = [...groupBy(scrobbleData, (s) => s.get(input.name))].sort((a, b) => b[1].length - a[1].length);
+    // group values case-insensitively because Last.fm doesn't distinguish casings, and display each group's most common casing
+    const groups = [...groupBy(scrobbleData, (s) => { var _a, _b; return (_b = (_a = s.get(input.name)) === null || _a === void 0 ? void 0 : _a.toLowerCase()) !== null && _b !== void 0 ? _b : null; }).values()]
+        .map((values) => [getMostCommonValue(values.map((s) => s.get(input.name))), values])
+        .sort((a, b) => b[1].length - a[1].length);
     const subInputs = [];
     if (groups.length >= 2) {
         // display the "Mixed" placeholder when there are two or more possible values
@@ -1163,7 +1193,10 @@ function augmentInput(scrobbleData, popup, form, originalInput, input, plural) {
         for (const [key] of groups) {
             const listItem = createCollapseListItem((_a = key === null || key === void 0 ? void 0 : key.toString()) !== null && _a !== void 0 ? _a : '');
             collapseContainer.appendChild(listItem);
-            subInputs.push(listItem.querySelector('input'));
+            const subInput = listItem.querySelector('input');
+            subInput.dataset['mixedFor'] = input.name;
+            subInput.dataset['original'] = (_b = key === null || key === void 0 ? void 0 : key.toString()) !== null && _b !== void 0 ? _b : '';
+            subInputs.push(subInput);
         }
         collapseButton.addEventListener('click', () => {
             collapseButton.textContent = `${collapseContainer.style.display === 'none' ? '⯆' : '⯈'} ${groups.length} ${plural}`;
@@ -1181,7 +1214,7 @@ function augmentInput(scrobbleData, popup, form, originalInput, input, plural) {
         datalist.id = `${constants_1.ns}-${popup.id}-${input.name}-datalist`;
         for (const [value] of groups) {
             const option = document.createElement('option');
-            option.value = (_b = value) !== null && _b !== void 0 ? _b : '';
+            option.value = (_c = value) !== null && _c !== void 0 ? _c : '';
             datalist.appendChild(option);
         }
         input.autocomplete = 'off';
@@ -1205,8 +1238,10 @@ function augmentInput(scrobbleData, popup, form, originalInput, input, plural) {
         });
         for (const subInput of subInputs) {
             subInput.addEventListener('input', () => {
+                // go back to the untouched "Mixed" state when every sub-input is reverted to its original value
+                const isChanged = subInputs.some((x) => x.value.toLowerCase() !== x.dataset['original'].toLowerCase());
                 input.value = '';
-                input.placeholder = 'Mixed (changed)';
+                input.placeholder = isChanged ? 'Mixed (changed)' : 'Mixed';
                 refreshInputState();
             });
         }
@@ -1262,60 +1297,90 @@ function groupBy(array, keyFunc) {
     }
     return map;
 }
+function getMostCommonValue(values) {
+    return [...groupBy(values, (value) => value)].sort((a, b) => b[1].length - a[1].length)[0][0];
+}
 function determineFormDataToSubmit(form, scrobbleData) {
-    var _a, _b;
+    const editScrobble = createScrobbleEditor(form);
+    return scrobbleData
+        .map(editScrobble)
+        .filter((formData) => formData !== null);
+}
+// returns a function that creates the form data to submit for a scrobble, or null if the scrobble wouldn't change
+function createScrobbleEditor(form) {
     const formData = new FormData(form);
-    const formDataToSubmit = [];
-    const track_name = getMixedInputValue(form.elements.track_name);
-    const artist_name = getMixedInputValue(form.elements.artist_name);
-    const album_name = getMixedInputValue(form.elements.album_name);
-    const album_artist_name = getMixedInputValue(form.elements.album_artist_name);
-    for (const originalData of scrobbleData) {
+    const mapTrackName = createValueMapper(form, form.elements.track_name);
+    const mapArtistName = createValueMapper(form, form.elements.artist_name);
+    const mapAlbumName = createValueMapper(form, form.elements.album_name);
+    const mapAlbumArtistName = createValueMapper(form, form.elements.album_artist_name);
+    return (originalData) => {
+        var _a, _b, _c, _d, _e, _f;
         const track_name_original = originalData.get('track_name');
         const artist_name_original = originalData.get('artist_name');
-        const album_name_original = (_a = originalData.get('album_name')) !== null && _a !== void 0 ? _a : '';
-        const album_artist_name_original = (_b = originalData.get('album_artist_name')) !== null && _b !== void 0 ? _b : '';
-        // if the album artist field is Mixed, use the old and new artist names to keep the album artist in sync
-        const album_artist_name_sync = form.elements.album_artist_name.placeholder === 'Mixed' && scrobbleData.some((s) => s.get('artist_name') === album_artist_name_original)
-            ? artist_name
-            : album_artist_name;
-        // TODO: move this sync to form event listeners
+        const album_name_original = ((_a = originalData.get('album_name')) !== null && _a !== void 0 ? _a : '');
+        const album_artist_name_original = ((_b = originalData.get('album_artist_name')) !== null && _b !== void 0 ? _b : '');
+        const track_name = (_c = mapTrackName(track_name_original)) !== null && _c !== void 0 ? _c : track_name_original;
+        const artist_name = (_d = mapArtistName(artist_name_original)) !== null && _d !== void 0 ? _d : artist_name_original;
+        const album_name = (_e = mapAlbumName(album_name_original)) !== null && _e !== void 0 ? _e : album_name_original;
+        const album_artist_name = (_f = mapAlbumArtistName(album_artist_name_original)) !== null && _f !== void 0 ? _f : album_artist_name_original;
         // check if anything changed compared to the original track, artist, album and album artist combination
-        if (track_name !== null && track_name !== track_name_original ||
-            artist_name !== null && artist_name !== artist_name_original ||
-            album_name !== null && album_name !== album_name_original ||
-            album_artist_name_sync !== null && album_artist_name_sync !== album_artist_name_original) {
-            const clonedFormData = cloneFormData(formData);
-            // Last.fm expects a timestamp
-            clonedFormData.set('timestamp', originalData.get('timestamp'));
-            // populate the *_original fields to instruct Last.fm which scrobbles need to be edited
-            clonedFormData.set('track_name_original', track_name_original);
-            if (track_name === null) {
-                clonedFormData.set('track_name', track_name_original);
-            }
-            clonedFormData.set('artist_name_original', artist_name_original);
-            if (artist_name === null) {
-                clonedFormData.set('artist_name', artist_name_original);
-            }
-            clonedFormData.set('album_name_original', album_name_original);
-            if (album_name === null) {
-                clonedFormData.set('album_name', album_name_original);
-            }
-            clonedFormData.set('album_artist_name_original', album_artist_name_original);
-            if (album_artist_name_sync === null) {
-                clonedFormData.set('album_artist_name', album_artist_name_original);
-            }
-            else {
-                clonedFormData.set('album_artist_name', album_artist_name_sync);
-            }
-            clonedFormData.set('ajax', '1');
-            formDataToSubmit.push(clonedFormData);
+        // Last.fm doesn't accept case-only changes, so those don't count, but the entered casing is still submitted
+        if (track_name.toLowerCase() === track_name_original.toLowerCase() &&
+            artist_name.toLowerCase() === artist_name_original.toLowerCase() &&
+            album_name.toLowerCase() === album_name_original.toLowerCase() &&
+            album_artist_name.toLowerCase() === album_artist_name_original.toLowerCase()) {
+            return null;
         }
-    }
-    return formDataToSubmit;
+        const clonedFormData = cloneFormData(formData);
+        // Last.fm expects a timestamp
+        clonedFormData.set('timestamp', originalData.get('timestamp'));
+        // populate the *_original fields to instruct Last.fm which scrobbles need to be edited
+        clonedFormData.set('track_name_original', track_name_original);
+        clonedFormData.set('track_name', track_name);
+        clonedFormData.set('artist_name_original', artist_name_original);
+        clonedFormData.set('artist_name', artist_name);
+        clonedFormData.set('album_name_original', album_name_original);
+        clonedFormData.set('album_name', album_name);
+        clonedFormData.set('album_artist_name_original', album_artist_name_original);
+        clonedFormData.set('album_artist_name', album_artist_name);
+        clonedFormData.set('ajax', '1');
+        return clonedFormData;
+    };
 }
-function getMixedInputValue(input) {
-    return input.placeholder !== 'Mixed' ? input.value : null;
+// returns a function that maps an original value to its new value, or to null if the input was left untouched
+// untouched inputs keep each scrobble's original casing, instead of the casing the input happens to display
+function createValueMapper(form, input) {
+    if (input.placeholder === 'Mixed') {
+        return () => null;
+    }
+    const subInputs = getSubInputs(form, input);
+    if (input.placeholder === 'Mixed (changed)') {
+        // each edited sub-input holds the new value for one of the original values
+        const newValues = new Map(subInputs
+            .filter((subInput) => subInput.value !== subInput.dataset['original'])
+            .map((subInput) => [subInput.dataset['original'].toLowerCase(), subInput.value]));
+        return (originalValue) => { var _a; return (_a = newValues.get(originalValue.toLowerCase())) !== null && _a !== void 0 ? _a : null; };
+    }
+    if (subInputs.length === 0 && input.value === input.defaultValue) {
+        return () => null;
+    }
+    const value = input.value;
+    return () => value;
+}
+// sub-inputs are the inputs listed under a Mixed input, one per original value
+function getSubInputs(form, input) {
+    return [...form.querySelectorAll(`input[data-mixed-for="${input.name}"]`)];
+}
+// a Mixed input merges scrobbles when it maps two or more original values to the same new value
+function isMerging(form, input) {
+    if (input.placeholder === 'Mixed') {
+        return false;
+    }
+    if (input.placeholder === 'Mixed (changed)') {
+        const newValues = getSubInputs(form, input).map((subInput) => subInput.value);
+        return new Set(newValues.map((value) => value.toLowerCase())).size < newValues.length;
+    }
+    return true;
 }
 function cloneFormData(formData) {
     const clonedFormData = new FormData();
@@ -1482,37 +1547,160 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.enhanceAutomaticEditsPage = enhanceAutomaticEditsPage;
+const he_1 = __importDefault(__webpack_require__(488));
 const tiny_async_pool_1 = __importDefault(__webpack_require__(692));
 const constants_1 = __webpack_require__(921);
 const utils_1 = __webpack_require__(135);
 const toolbarTemplate = document.createElement('template');
 toolbarTemplate.innerHTML = `
     <div>
-        Go to album artist: <select></select>
+        <span></span> <select></select>
     </div>`;
 const domParser = new DOMParser();
-const artistMap = new Map();
-let artistSelect = (/* unused pure expression or super */ null && (undefined));
-let scrollArtistIntoView = false;
-let loadPagesPromise = (/* unused pure expression or super */ null && (undefined));
-let loadPagesProgressElement = (/* unused pure expression or super */ null && (undefined));
+const sortFieldsBySuffix = {
+    track: { key: 'track_name', label: 'track' },
+    album: { key: 'album_name', label: 'album' },
+    artist: { key: 'artist_name', label: 'artist' },
+    track_artist: { key: 'artist_name', label: 'artist' },
+    album_artist: { key: 'album_artist_name', label: 'album artist' },
+};
+// Last.fm sorts by original values with "from_" options (e.g. from_album), and by edited values with "to_" options (e.g. to_album),
+// sorting by modification date has no field to navigate by
+function getSortField(sort) {
+    const match = /^(from|to)_(.+)$/.exec(sort);
+    const sortField = match ? sortFieldsBySuffix[match[2]] : undefined;
+    return sortField ? { ...sortField, edited: match[1] === 'to' } : undefined;
+}
+// the items depend on the list options, and are reset when those change
+let itemsOptionsKey = undefined;
+const itemMap = new Map();
+let scrollItemIntoView = false;
+let loadPagesPromise = undefined;
+let loadPagesProgressText = '';
 async function enhanceAutomaticEditsPage(element) {
+    var _a;
     if (!document.URL.includes('/settings/subscription/automatic-edits')) {
         return;
     }
-    const section = element.querySelector('#subscription-corrections');
-    const table = section === null || section === void 0 ? void 0 : section.querySelector('.edits-list table.chart-table');
-    if (!section || !table) {
+    const section = (_a = element.closest('#subscription-corrections')) !== null && _a !== void 0 ? _a : element.querySelector('#subscription-corrections');
+    if (!section) {
         return;
     }
+    observeSection(section);
+    enhanceSection(section);
+}
+const observedSections = new WeakSet();
+// Last.fm loads and replaces the contents of the section itself when paginating or sorting,
+// which doesn't necessarily add new elements, so watch the section for any change
+function observeSection(section) {
+    if (observedSections.has(section)) {
+        return;
+    }
+    observedSections.add(section);
+    const observer = new MutationObserver(() => enhanceSection(section));
+    observer.observe(section, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['data-enhanced'],
+    });
+    // Last.fm can replace the toolbar with a copy of its HTML, which loses event listeners,
+    // so listen on the section instead, which also receives change events from copies
+    section.addEventListener('change', (event) => {
+        const itemSelect = event.target;
+        const toolbar = itemSelect instanceof HTMLSelectElement ? itemSelect.closest(`.${constants_1.ns}-toolbar`) : null;
+        if (toolbar) {
+            goToItem(itemSelect, toolbar);
+        }
+    });
+}
+function goToItem(itemSelect, toolbar) {
+    const selectedItem = itemMap.get(itemSelect.value);
+    if (!selectedItem) {
+        return;
+    }
+    const anchor = document.createElement('a');
+    anchor.href = `?${toolbar.dataset['options']}&page=${selectedItem.pageNumber}&go-to=${(0, utils_1.encodeURIComponent2)(selectedItem.name)}`;
+    document.body.appendChild(anchor);
+    scrollItemIntoView = true;
+    anchor.click();
+    document.body.removeChild(anchor);
+}
+// safe to call repeatedly, rows and the toolbar are only enhanced or added when needed
+function enhanceSection(section) {
+    const table = section.querySelector('.edits-list table.chart-table');
+    if (!table) {
+        return;
+    }
+    const options = getListOptions(section);
+    const sortField = getSortField(options.sort);
     const keys = table.classList.contains('automatic-album-edits')
         ? ['album_name', 'album_artist_name']
         : ['track_name', 'artist_name', 'album_name', 'album_artist_name'];
-    enhanceTable(table, keys);
+    enhanceTable(table, keys, sortField);
     // TODO: revive "Go to" select feature
-    //addToolbar(section, table);
+    const toolbar = section.querySelector(`.${constants_1.ns}-toolbar`);
+    if (!sortField) {
+        toolbar === null || toolbar === void 0 ? void 0 : toolbar.remove();
+    }
+    else if ((toolbar === null || toolbar === void 0 ? void 0 : toolbar.dataset['options']) !== getOptionsKey(options)) {
+        toolbar === null || toolbar === void 0 ? void 0 : toolbar.remove();
+        addToolbar(section, table, options, sortField);
+    }
+    else {
+        syncToolbar();
+    }
 }
-async function addToolbar(section, table) {
+// a toolbar that Last.fm put back can be outdated, only touch it when it is, to avoid triggering the observer endlessly
+function syncToolbar() {
+    const itemSelect = document.querySelector(`.${constants_1.ns}-toolbar select`);
+    if (itemSelect && itemSelect.options.length !== itemMap.size) {
+        renderItemSelect();
+    }
+    const progressElement = document.querySelector(`.${constants_1.ns}-toolbar-progress`);
+    if (progressElement && loadPagesProgressText === '') {
+        progressElement.remove();
+    }
+    else if (progressElement && progressElement.textContent !== loadPagesProgressText) {
+        progressElement.textContent = loadPagesProgressText;
+    }
+}
+// the URL doesn't always contain every option, e.g. switching the display preference drops the sort parameters,
+// so read the options from the selected items in Last.fm's "Original name" and "Sort by" menus, and fall back to the URL
+function getListOptions(section) {
+    var _a, _b, _c, _d, _e;
+    const params = new URLSearchParams(location.search);
+    const selectedDisplay = section.querySelector('#automatic-edit-view-options .display-options-clickable-item--selected');
+    const selectedSort = section.querySelector('#automatic-edit-sort-options .display-options-clickable-item--selected');
+    let sortDirection = (_a = params.get('sort-direction')) !== null && _a !== void 0 ? _a : 'asc';
+    if (selectedSort === null || selectedSort === void 0 ? void 0 : selectedSort.classList.contains('display-options-clickable-item--asc')) {
+        sortDirection = 'asc';
+    }
+    else if (selectedSort === null || selectedSort === void 0 ? void 0 : selectedSort.classList.contains('display-options-clickable-item--desc')) {
+        sortDirection = 'desc';
+    }
+    return {
+        displayPreference: (_c = (_b = selectedDisplay === null || selectedDisplay === void 0 ? void 0 : selectedDisplay.dataset['display']) !== null && _b !== void 0 ? _b : params.get('display-preference')) !== null && _c !== void 0 ? _c : 'original',
+        sort: (_e = (_d = selectedSort === null || selectedSort === void 0 ? void 0 : selectedSort.dataset['sort']) !== null && _d !== void 0 ? _d : params.get('sort')) !== null && _e !== void 0 ? _e : 'modification_date',
+        sortDirection,
+    };
+}
+function getOptionsKey(options) {
+    return new URLSearchParams({
+        'display-preference': options.displayPreference,
+        'sort': options.sort,
+        'sort-direction': options.sortDirection,
+    }).toString();
+}
+// the value of the sort field that the table is sorted by, which is either the original or the edited value
+function getItemName(formData, sortField) {
+    const name = sortField.edited
+        ? formData.get(sortField.key)
+        : formData.get(`${sortField.key}_original`);
+    return name.toString();
+}
+async function addToolbar(section, table, options, sortField) {
+    var _a;
     const paginationList = section.querySelector('.pagination-list');
     if (!paginationList) {
         return;
@@ -1523,38 +1711,61 @@ async function addToolbar(section, table) {
     if (pageCount === 1) {
         return;
     }
-    const toolbar = toolbarTemplate.content.firstElementChild.cloneNode(true);
-    section.insertBefore(toolbar, section.firstElementChild);
-    artistSelect = toolbar.querySelector('select');
-    const selectedArtistKey = getSelectedArtistKey();
-    for (const artist of [...artistMap.values()].sort((a, b) => a.sortName.localeCompare(b.sortName))) {
-        const option = document.createElement('option');
-        option.value = artist.key;
-        option.selected = artist.key === selectedArtistKey;
-        option.text = artist.name;
-        const keepNothingSelected = !option.selected && artistSelect.selectedIndex === -1;
-        artistSelect.appendChild(option);
-        if (keepNothingSelected) {
-            artistSelect.selectedIndex = -1;
-        }
+    const optionsKey = getOptionsKey(options);
+    if (itemsOptionsKey !== optionsKey) {
+        itemsOptionsKey = optionsKey;
+        itemMap.clear();
+        loadPagesPromise = undefined;
     }
-    artistSelect.addEventListener('change', function () {
-        const selectedArtist = artistMap.get(this.value);
-        const anchor = document.createElement('a');
-        anchor.href = `?page=${selectedArtist.pageNumber}&album-artist=${(0, utils_1.encodeURIComponent2)(selectedArtist.name)}`;
-        document.body.appendChild(anchor);
-        scrollArtistIntoView = true;
-        anchor.click();
-        document.body.removeChild(anchor);
-    });
-    loadPagesProgressElement = document.createElement('span');
+    const toolbar = toolbarTemplate.content.firstElementChild.cloneNode(true);
+    toolbar.className = `${constants_1.ns}-toolbar`;
+    toolbar.dataset['options'] = optionsKey;
+    toolbar.querySelector('span').textContent = `Go to ${sortField.label}:`;
+    // place the toolbar below the heading and table options, or at the top if Last.fm's layout changed
+    const tableContainer = section.querySelector(':scope > .automatic-edits-table-container');
+    if (tableContainer) {
+        tableContainer.after(toolbar);
+    }
+    else {
+        section.prepend(toolbar);
+    }
+    const progressElement = document.createElement('span');
+    progressElement.className = `${constants_1.ns}-toolbar-progress`;
+    progressElement.textContent = loadPagesProgressText;
     toolbar.insertAdjacentText('beforeend', ' ');
-    toolbar.insertAdjacentElement('beforeend', loadPagesProgressElement);
-    loadPagesPromise !== null && loadPagesPromise !== void 0 ? loadPagesPromise : (loadPagesPromise = loadPages(table, currentPageNumber, pageCount));
+    toolbar.insertAdjacentElement('beforeend', progressElement);
+    renderItemSelect();
+    loadPagesPromise !== null && loadPagesPromise !== void 0 ? loadPagesPromise : (loadPagesPromise = loadPages(table, currentPageNumber, pageCount, options, sortField));
     await loadPagesPromise;
-    toolbar.removeChild(loadPagesProgressElement);
+    // an empty progress text means loading is done, unless loading restarted for other list options in the meantime
+    if (itemsOptionsKey === optionsKey) {
+        loadPagesProgressText = '';
+        (_a = document.querySelector(`.${constants_1.ns}-toolbar-progress`)) === null || _a === void 0 ? void 0 : _a.remove();
+    }
 }
-function enhanceTable(table, keys) {
+// Last.fm can take the toolbar out of the page and put it back later, while another toolbar was added in the meantime,
+// so never hold on to toolbar elements, but always look up the toolbar that is currently on the page
+function renderItemSelect() {
+    const itemSelect = document.querySelector(`.${constants_1.ns}-toolbar select`);
+    if (!itemSelect) {
+        return;
+    }
+    const selectedItemKey = getSelectedItemKey();
+    itemSelect.replaceChildren();
+    // respect the order in which Last.fm sorts the table, pages can finish loading in any order
+    for (const item of [...itemMap.values()].sort((a, b) => a.pageNumber - b.pageNumber || a.rowIndex - b.rowIndex)) {
+        const option = document.createElement('option');
+        option.value = item.key;
+        option.text = item.name;
+        itemSelect.appendChild(option);
+    }
+    // keep nothing selected, unless an item was navigated to
+    itemSelect.value = selectedItemKey !== null && selectedItemKey !== void 0 ? selectedItemKey : '';
+    if (itemSelect.value !== selectedItemKey) {
+        itemSelect.selectedIndex = -1;
+    }
+}
+function enhanceTable(table, keys, sortField) {
     document.body.style.backgroundColor = '#fff';
     table.style.tableLayout = 'auto';
     // TODO: revive clickable headers feature
@@ -1562,48 +1773,46 @@ function enhanceTable(table, keys) {
     //     cell.innerHTML = `<a href="javascript:void(0)" role="button">${cell.textContent}</a>`;
     // }
     for (const row of table.tBodies[0].rows) {
-        enhanceRow(row, keys);
+        enhanceRow(row, keys, sortField);
     }
 }
-function enhanceRow(row, keys) {
+function enhanceRow(row, keys, sortField) {
     if (row.dataset['enhanced'] === 'true') {
         return;
     }
     row.dataset['enhanced'] = 'true';
     const formData = getFormData(row);
-    function emphasize(cell, content) {
-        var _a;
+    function emphasize(cell, editedValue, originalValue) {
         cell.style.lineHeight = '1';
         cell.innerHTML = `
             <div>
                 <span class="sr-only">
-                    ${cell.textContent}
+                    ${he_1.default.escape(originalValue)}
                 </span>
                 <b>
-                    ${content}
+                    ${he_1.default.escape(editedValue)}
                 </b>
             </div>
             <small>
-                Originally "${(_a = cell.textContent) === null || _a === void 0 ? void 0 : _a.trim()}"
+                Originally "${he_1.default.escape(originalValue)}"
             </small>`;
     }
     for (let i = 0; i < keys.length; i++) {
         const key = keys[i];
-        const currentValue = formData.get(key).toString();
+        const editedValue = formData.get(key).toString();
         const originalValue = formData.get(`${key}_original`).toString();
-        if (currentValue !== originalValue) {
-            emphasize(row.cells[i], currentValue);
+        if (editedValue !== originalValue) {
+            emphasize(row.cells[i], editedValue, originalValue);
         }
         else if (i === 0) {
             // remove bold
             row.cells[0].innerHTML = row.cells[0].textContent;
         }
     }
-    const originalAlbumArtistName = formData.get('album_artist_name_original').toString();
-    if (originalAlbumArtistName.toLowerCase() === getSelectedArtistKey()) {
+    if (sortField && getItemName(formData, sortField).toLowerCase() === getSelectedItemKey()) {
         row.classList.add(`${constants_1.ns}-highlight`);
-        if (scrollArtistIntoView) {
-            scrollArtistIntoView = false;
+        if (scrollItemIntoView) {
+            scrollItemIntoView = false;
             row.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }
@@ -1611,26 +1820,31 @@ function enhanceRow(row, keys) {
 function getFormData(row) {
     return new FormData(row.querySelector('form'));
 }
-function getSelectedArtistKey() {
+function getSelectedItemKey() {
     var _a;
-    return (_a = new URLSearchParams(location.search).get('album-artist')) === null || _a === void 0 ? void 0 : _a.toLowerCase();
+    return (_a = new URLSearchParams(location.search).get('go-to')) === null || _a === void 0 ? void 0 : _a.toLowerCase();
 }
-async function loadPages(table, currentPageNumber, pageCount) {
+async function loadPages(table, currentPageNumber, pageCount, options, sortField) {
+    const optionsKey = getOptionsKey(options);
     const currentPage = { pageNumber: currentPageNumber, rows: [...table.tBodies[0].rows] };
     const pages = [currentPage];
     const pageNumbersToLoad = [...Array(pageCount).keys()].map(i => i + 1).filter(i => i !== currentPageNumber);
-    addArtistsToSelect(currentPage);
+    addItems(currentPage, sortField);
     updateProgressText(1, pageCount);
-    for await (const page of (0, tiny_async_pool_1.default)(6, pageNumbersToLoad, loadPage)) {
+    for await (const page of (0, tiny_async_pool_1.default)(6, pageNumbersToLoad, (pageNumber) => loadPage(pageNumber, optionsKey))) {
+        // stop when the list options changed in the meantime
+        if (itemsOptionsKey !== optionsKey) {
+            break;
+        }
         pages.push(page);
-        addArtistsToSelect(page);
+        addItems(page, sortField);
         updateProgressText(pages.length, pageCount);
     }
     pages.sort((a, b) => a.pageNumber < b.pageNumber ? -1 : 1);
     return pages;
 }
-async function loadPage(pageNumber) {
-    const response = await (0, utils_1.fetchAndRetry)(`?page=${pageNumber}&_pjax=%23content`, {
+async function loadPage(pageNumber, optionsKey) {
+    const response = await (0, utils_1.fetchAndRetry)(`?${optionsKey}&page=${pageNumber}&_pjax=%23content`, {
         credentials: 'include',
         headers: {
             'X-Pjax': 'true',
@@ -1645,34 +1859,28 @@ async function loadPage(pageNumber) {
         rows: [...table.tBodies[0].rows],
     };
 }
-function addArtistsToSelect(page) {
-    const selectedArtistKey = getSelectedArtistKey();
-    for (const row of page.rows) {
+function addItems(page, sortField) {
+    for (const [rowIndex, row] of page.rows.entries()) {
         const formData = getFormData(row);
-        const name = formData.get('album_artist_name_original').toString();
-        const sortName = name.replace(/\s+/g, '');
+        const name = getItemName(formData, sortField);
         const key = name.toLowerCase();
-        const artist = artistMap.get(key);
-        if (!artist) {
-            artistMap.set(key, { key, name, sortName, pageNumber: page.pageNumber });
-            const option = document.createElement('option');
-            option.value = key;
-            option.selected = key === selectedArtistKey;
-            option.text = name;
-            const keepNothingSelected = !option.selected && artistSelect.selectedIndex === -1;
-            const insertAtIndex = [...artistMap.values()].sort((a, b) => a.sortName.localeCompare(b.sortName)).findIndex(x => x.key === key);
-            artistSelect.insertBefore(option, artistSelect.children[insertAtIndex]);
-            if (keepNothingSelected) {
-                artistSelect.selectedIndex = -1;
-            }
+        const item = itemMap.get(key);
+        if (!item) {
+            itemMap.set(key, { key, name, pageNumber: page.pageNumber, rowIndex });
         }
-        else if (artist.pageNumber > page.pageNumber) {
-            artist.pageNumber = page.pageNumber;
+        else if (item.pageNumber > page.pageNumber) {
+            item.pageNumber = page.pageNumber;
+            item.rowIndex = rowIndex;
         }
     }
+    renderItemSelect();
 }
 function updateProgressText(current, total) {
-    loadPagesProgressElement.textContent = `${current} / ${total} (${(current * 100 / total).toFixed(0)}%)`;
+    loadPagesProgressText = `${current} / ${total} (${(current * 100 / total).toFixed(0)}%)`;
+    const progressElement = document.querySelector(`.${constants_1.ns}-toolbar-progress`);
+    if (progressElement) {
+        progressElement.textContent = loadPagesProgressText;
+    }
 }
 
 

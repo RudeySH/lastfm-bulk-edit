@@ -1,6 +1,6 @@
 {
   "name": "lastfm-advanced",
-  "version": "2.0.0-alpha.2",
+  "version": "2.0.0",
   "description": "New and improved features for Last.fm. Advanced bulk edit, and more!",
   "main": "dist/lastfm-advanced.js",
   "scripts": {
@@ -11,14 +11,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RudeySH/lastfm-bulk-edit.git"
+    "url": "git+https://github.com/RudeySH/lastfm-advanced.git"
   },
-  "author": "RudeySH",
+  "author": "Rudey",
   "license": "AGPL-3.0-or-later",
   "bugs": {
-    "url": "https://github.com/RudeySH/lastfm-bulk-edit/issues"
+    "url": "https://github.com/RudeySH/lastfm-advanced/issues"
   },
-  "homepage": "https://github.com/RudeySH/lastfm-bulk-edit/tree/v2",
+  "homepage": "https://github.com/RudeySH/lastfm-advanced",
   "private": true,
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.13",

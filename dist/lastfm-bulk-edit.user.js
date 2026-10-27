@@ -1,0 +1,2793 @@
+// ==UserScript==
+// @name Last.fm Bulk Edit
+// @description Outdated installation! Uninstall this script and reinstall it from https://github.com/RudeySH/lastfm-advanced
+// @version 2.0.0
+// @author Rudey
+// @homepage https://github.com/RudeySH/lastfm-advanced
+// @supportURL https://github.com/RudeySH/lastfm-advanced/issues
+// @match https://www.last.fm/*
+// @downloadURL https://raw.githubusercontent.com/RudeySH/lastfm-advanced/HEAD/dist/lastfm-bulk-edit.user.js
+// @grant none
+// @icon https://raw.githubusercontent.com/RudeySH/lastfm-advanced/HEAD/img/icon.png
+// @license AGPL-3.0-or-later
+// @namespace https://github.com/RudeySH/lastfm-bulk-edit
+// @require https://cdnjs.cloudflare.com/ajax/libs/he/1.2.0/he.min.js
+// @updateURL https://raw.githubusercontent.com/RudeySH/lastfm-advanced/HEAD/dist/lastfm-bulk-edit.meta.js
+// ==/UserScript==
+
+/******/ (() => { // webpackBootstrap
+/******/ 	var __webpack_modules__ = ({
+
+/***/ 406
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(635);
+var Semaphore_1 = __webpack_require__(919);
+var Mutex = /** @class */ (function () {
+    function Mutex(cancelError) {
+        this._semaphore = new Semaphore_1.default(1, cancelError);
+    }
+    Mutex.prototype.acquire = function () {
+        return tslib_1.__awaiter(this, arguments, void 0, function (priority) {
+            var _a, releaser;
+            if (priority === void 0) { priority = 0; }
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0: return [4 /*yield*/, this._semaphore.acquire(1, priority)];
+                    case 1:
+                        _a = _b.sent(), releaser = _a[1];
+                        return [2 /*return*/, releaser];
+                }
+            });
+        });
+    };
+    Mutex.prototype.runExclusive = function (callback, priority) {
+        if (priority === void 0) { priority = 0; }
+        return this._semaphore.runExclusive(function () { return callback(); }, 1, priority);
+    };
+    Mutex.prototype.isLocked = function () {
+        return this._semaphore.isLocked();
+    };
+    Mutex.prototype.waitForUnlock = function (priority) {
+        if (priority === void 0) { priority = 0; }
+        return this._semaphore.waitForUnlock(1, priority);
+    };
+    Mutex.prototype.release = function () {
+        if (this._semaphore.isLocked())
+            this._semaphore.release();
+    };
+    Mutex.prototype.cancel = function () {
+        return this._semaphore.cancel();
+    };
+    return Mutex;
+}());
+exports["default"] = Mutex;
+
+
+/***/ },
+
+/***/ 919
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(635);
+var errors_1 = __webpack_require__(586);
+var Semaphore = /** @class */ (function () {
+    function Semaphore(_value, _cancelError) {
+        if (_cancelError === void 0) { _cancelError = errors_1.E_CANCELED; }
+        this._value = _value;
+        this._cancelError = _cancelError;
+        this._queue = [];
+        this._weightedWaiters = [];
+    }
+    Semaphore.prototype.acquire = function (weight, priority) {
+        var _this = this;
+        if (weight === void 0) { weight = 1; }
+        if (priority === void 0) { priority = 0; }
+        if (weight <= 0)
+            throw new Error("invalid weight ".concat(weight, ": must be positive"));
+        return new Promise(function (resolve, reject) {
+            var task = { resolve: resolve, reject: reject, weight: weight, priority: priority };
+            var i = findIndexFromEnd(_this._queue, function (other) { return priority <= other.priority; });
+            if (i === -1 && weight <= _this._value) {
+                // Needs immediate dispatch, skip the queue
+                _this._dispatchItem(task);
+            }
+            else {
+                _this._queue.splice(i + 1, 0, task);
+            }
+        });
+    };
+    Semaphore.prototype.runExclusive = function (callback_1) {
+        return tslib_1.__awaiter(this, arguments, void 0, function (callback, weight, priority) {
+            var _a, value, release;
+            if (weight === void 0) { weight = 1; }
+            if (priority === void 0) { priority = 0; }
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0: return [4 /*yield*/, this.acquire(weight, priority)];
+                    case 1:
+                        _a = _b.sent(), value = _a[0], release = _a[1];
+                        _b.label = 2;
+                    case 2:
+                        _b.trys.push([2, , 4, 5]);
+                        return [4 /*yield*/, callback(value)];
+                    case 3: return [2 /*return*/, _b.sent()];
+                    case 4:
+                        release();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    Semaphore.prototype.waitForUnlock = function (weight, priority) {
+        var _this = this;
+        if (weight === void 0) { weight = 1; }
+        if (priority === void 0) { priority = 0; }
+        if (weight <= 0)
+            throw new Error("invalid weight ".concat(weight, ": must be positive"));
+        if (this._couldLockImmediately(weight, priority)) {
+            return Promise.resolve();
+        }
+        else {
+            return new Promise(function (resolve) {
+                if (!_this._weightedWaiters[weight - 1])
+                    _this._weightedWaiters[weight - 1] = [];
+                insertSorted(_this._weightedWaiters[weight - 1], { resolve: resolve, priority: priority });
+            });
+        }
+    };
+    Semaphore.prototype.isLocked = function () {
+        return this._value <= 0;
+    };
+    Semaphore.prototype.getValue = function () {
+        return this._value;
+    };
+    Semaphore.prototype.setValue = function (value) {
+        this._value = value;
+        this._dispatchQueue();
+    };
+    Semaphore.prototype.release = function (weight) {
+        if (weight === void 0) { weight = 1; }
+        if (weight <= 0)
+            throw new Error("invalid weight ".concat(weight, ": must be positive"));
+        this._value += weight;
+        this._dispatchQueue();
+    };
+    Semaphore.prototype.cancel = function () {
+        var _this = this;
+        this._queue.forEach(function (entry) { return entry.reject(_this._cancelError); });
+        this._queue = [];
+    };
+    Semaphore.prototype._dispatchQueue = function () {
+        this._drainUnlockWaiters();
+        while (this._queue.length > 0 && this._queue[0].weight <= this._value) {
+            this._dispatchItem(this._queue.shift());
+            this._drainUnlockWaiters();
+        }
+    };
+    Semaphore.prototype._dispatchItem = function (item) {
+        var previousValue = this._value;
+        this._value -= item.weight;
+        item.resolve([previousValue, this._newReleaser(item.weight)]);
+    };
+    Semaphore.prototype._newReleaser = function (weight) {
+        var _this = this;
+        var called = false;
+        return function () {
+            if (called)
+                return;
+            called = true;
+            _this.release(weight);
+        };
+    };
+    Semaphore.prototype._drainUnlockWaiters = function () {
+        if (this._queue.length === 0) {
+            for (var weight = this._value; weight > 0; weight--) {
+                var waiters = this._weightedWaiters[weight - 1];
+                if (!waiters)
+                    continue;
+                waiters.forEach(function (waiter) { return waiter.resolve(); });
+                this._weightedWaiters[weight - 1] = [];
+            }
+        }
+        else {
+            var queuedPriority_1 = this._queue[0].priority;
+            for (var weight = this._value; weight > 0; weight--) {
+                var waiters = this._weightedWaiters[weight - 1];
+                if (!waiters)
+                    continue;
+                var i = waiters.findIndex(function (waiter) { return waiter.priority <= queuedPriority_1; });
+                (i === -1 ? waiters : waiters.splice(0, i))
+                    .forEach((function (waiter) { return waiter.resolve(); }));
+            }
+        }
+    };
+    Semaphore.prototype._couldLockImmediately = function (weight, priority) {
+        return (this._queue.length === 0 || this._queue[0].priority < priority) &&
+            weight <= this._value;
+    };
+    return Semaphore;
+}());
+function insertSorted(a, v) {
+    var i = findIndexFromEnd(a, function (other) { return v.priority <= other.priority; });
+    a.splice(i + 1, 0, v);
+}
+function findIndexFromEnd(a, predicate) {
+    for (var i = a.length - 1; i >= 0; i--) {
+        if (predicate(a[i])) {
+            return i;
+        }
+    }
+    return -1;
+}
+exports["default"] = Semaphore;
+
+
+/***/ },
+
+/***/ 586
+(__unused_webpack_module, exports) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.E_CANCELED = exports.E_ALREADY_LOCKED = exports.E_TIMEOUT = void 0;
+exports.E_TIMEOUT = new Error('timeout while waiting for mutex to become available');
+exports.E_ALREADY_LOCKED = new Error('mutex already locked');
+exports.E_CANCELED = new Error('request for lock canceled');
+
+
+/***/ },
+
+/***/ 693
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.tryAcquire = exports.withTimeout = exports.Semaphore = exports.Mutex = void 0;
+var tslib_1 = __webpack_require__(635);
+var Mutex_1 = __webpack_require__(406);
+Object.defineProperty(exports, "Mutex", ({ enumerable: true, get: function () { return Mutex_1.default; } }));
+var Semaphore_1 = __webpack_require__(919);
+Object.defineProperty(exports, "Semaphore", ({ enumerable: true, get: function () { return Semaphore_1.default; } }));
+var withTimeout_1 = __webpack_require__(646);
+Object.defineProperty(exports, "withTimeout", ({ enumerable: true, get: function () { return withTimeout_1.withTimeout; } }));
+var tryAcquire_1 = __webpack_require__(746);
+Object.defineProperty(exports, "tryAcquire", ({ enumerable: true, get: function () { return tryAcquire_1.tryAcquire; } }));
+tslib_1.__exportStar(__webpack_require__(586), exports);
+
+
+/***/ },
+
+/***/ 746
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.tryAcquire = void 0;
+var errors_1 = __webpack_require__(586);
+var withTimeout_1 = __webpack_require__(646);
+// eslint-disable-next-lisne @typescript-eslint/explicit-module-boundary-types
+function tryAcquire(sync, alreadyAcquiredError) {
+    if (alreadyAcquiredError === void 0) { alreadyAcquiredError = errors_1.E_ALREADY_LOCKED; }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (0, withTimeout_1.withTimeout)(sync, 0, alreadyAcquiredError);
+}
+exports.tryAcquire = tryAcquire;
+
+
+/***/ },
+
+/***/ 646
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.withTimeout = void 0;
+var tslib_1 = __webpack_require__(635);
+/* eslint-disable @typescript-eslint/no-explicit-any */
+var errors_1 = __webpack_require__(586);
+function withTimeout(sync, timeout, timeoutError) {
+    var _this = this;
+    if (timeoutError === void 0) { timeoutError = errors_1.E_TIMEOUT; }
+    return {
+        acquire: function (weightOrPriority, priority) {
+            var weight;
+            if (isSemaphore(sync)) {
+                weight = weightOrPriority;
+            }
+            else {
+                weight = undefined;
+                priority = weightOrPriority;
+            }
+            if (weight !== undefined && weight <= 0) {
+                throw new Error("invalid weight ".concat(weight, ": must be positive"));
+            }
+            return new Promise(function (resolve, reject) { return tslib_1.__awaiter(_this, void 0, void 0, function () {
+                var isTimeout, handle, ticket, release, e_1;
+                return tslib_1.__generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            isTimeout = false;
+                            handle = setTimeout(function () {
+                                isTimeout = true;
+                                reject(timeoutError);
+                            }, timeout);
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 3, , 4]);
+                            return [4 /*yield*/, (isSemaphore(sync)
+                                    ? sync.acquire(weight, priority)
+                                    : sync.acquire(priority))];
+                        case 2:
+                            ticket = _a.sent();
+                            if (isTimeout) {
+                                release = Array.isArray(ticket) ? ticket[1] : ticket;
+                                release();
+                            }
+                            else {
+                                clearTimeout(handle);
+                                resolve(ticket);
+                            }
+                            return [3 /*break*/, 4];
+                        case 3:
+                            e_1 = _a.sent();
+                            if (!isTimeout) {
+                                clearTimeout(handle);
+                                reject(e_1);
+                            }
+                            return [3 /*break*/, 4];
+                        case 4: return [2 /*return*/];
+                    }
+                });
+            }); });
+        },
+        runExclusive: function (callback, weight, priority) {
+            return tslib_1.__awaiter(this, void 0, void 0, function () {
+                var release, ticket;
+                return tslib_1.__generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            release = function () { return undefined; };
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, , 7, 8]);
+                            return [4 /*yield*/, this.acquire(weight, priority)];
+                        case 2:
+                            ticket = _a.sent();
+                            if (!Array.isArray(ticket)) return [3 /*break*/, 4];
+                            release = ticket[1];
+                            return [4 /*yield*/, callback(ticket[0])];
+                        case 3: return [2 /*return*/, _a.sent()];
+                        case 4:
+                            release = ticket;
+                            return [4 /*yield*/, callback()];
+                        case 5: return [2 /*return*/, _a.sent()];
+                        case 6: return [3 /*break*/, 8];
+                        case 7:
+                            release();
+                            return [7 /*endfinally*/];
+                        case 8: return [2 /*return*/];
+                    }
+                });
+            });
+        },
+        release: function (weight) {
+            sync.release(weight);
+        },
+        cancel: function () {
+            return sync.cancel();
+        },
+        waitForUnlock: function (weightOrPriority, priority) {
+            var weight;
+            if (isSemaphore(sync)) {
+                weight = weightOrPriority;
+            }
+            else {
+                weight = undefined;
+                priority = weightOrPriority;
+            }
+            if (weight !== undefined && weight <= 0) {
+                throw new Error("invalid weight ".concat(weight, ": must be positive"));
+            }
+            return new Promise(function (resolve, reject) {
+                var handle = setTimeout(function () { return reject(timeoutError); }, timeout);
+                (isSemaphore(sync)
+                    ? sync.waitForUnlock(weight, priority)
+                    : sync.waitForUnlock(priority)).then(function () {
+                    clearTimeout(handle);
+                    resolve();
+                });
+            });
+        },
+        isLocked: function () { return sync.isLocked(); },
+        getValue: function () { return sync.getValue(); },
+        setValue: function (value) { return sync.setValue(value); },
+    };
+}
+exports.withTimeout = withTimeout;
+function isSemaphore(sync) {
+    return sync.getValue !== undefined;
+}
+
+
+/***/ },
+
+/***/ 692
+(module) {
+
+async function* asyncPool(concurrency, iterable, iteratorFn) {
+  const executing = new Set();
+  async function consume() {
+    const [promise, value] = await Promise.race(executing);
+    executing.delete(promise);
+    return value;
+  }
+  for (const item of iterable) {
+    // Wrap iteratorFn() in an async fn to ensure we get a promise.
+    // Then expose such promise, so it's possible to later reference and
+    // remove it from the executing pool.
+    const promise = (async () => await iteratorFn(item, iterable))().then(
+      value => [promise, value]
+    );
+    executing.add(promise);
+    if (executing.size >= concurrency) {
+      yield await consume();
+    }
+  }
+  while (executing.size) {
+    yield await consume();
+  }
+}
+
+module.exports = asyncPool;
+
+
+/***/ },
+
+/***/ 921
+(__unused_webpack_module, exports) {
+
+"use strict";
+var __webpack_unused_export__;
+
+__webpack_unused_export__ = ({ value: true });
+exports.ns = void 0;
+exports.ns = 'advanced';
+
+
+/***/ },
+
+/***/ 556
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.appendBulkEditScrobblesHeaderLinkAndMenuItems = appendBulkEditScrobblesHeaderLinkAndMenuItems;
+const he_1 = __importDefault(__webpack_require__(488));
+const constants_1 = __webpack_require__(921);
+const LoadingModal_1 = __webpack_require__(694);
+const Modal_1 = __webpack_require__(946);
+const utils_1 = __webpack_require__(135);
+// use the top-right link to determine the current user
+const authLink = document.querySelector('a.auth-link');
+// https://regex101.com/r/gGv1X0/1
+const albumRegExp = new RegExp(`^${authLink === null || authLink === void 0 ? void 0 : authLink.href}/library/music(/\\+[^/]*)*(/[^+][^/]*){2}$`);
+const artistRegExp = new RegExp(`^${authLink === null || authLink === void 0 ? void 0 : authLink.href}/library/music(/\\+[^/]*)*(/[^+][^/]*){1}(/\\+[^/]*)?$`);
+const domParser = new DOMParser();
+const bulkEditScrobbleFormTemplate = document.createElement('template');
+bulkEditScrobbleFormTemplate.innerHTML = `
+    <form method="POST" action="${authLink === null || authLink === void 0 ? void 0 : authLink.getAttribute('href')}/library/edit-track?edited-variation=library-track-scrobble"
+          data-edit-scrobble data-bulk-edit-scrobbles>
+        <input type="hidden" name="csrfmiddlewaretoken" value="">
+        <input type="hidden" name="artist_name" value="">
+        <input type="hidden" name="track_name" value="">
+        <input type="hidden" name="album_name" value="">
+        <input type="hidden" name="album_artist_name" value="">
+        <input type="hidden" name="timestamp" value="">
+        <button type="submit" style="display: none;"></button>
+    </form>`;
+const bulkEditSectionTemplate = document.createElement('template');
+bulkEditSectionTemplate.innerHTML = `
+    <div>
+        <p class="edit-scrobble-label">Bulk edit</p>
+        <div>
+            <div class="checkbox">
+                <label><input type="checkbox">Apply to all past scrobbles</label>
+            </div>
+        </div>
+    </div>`;
+const editRangeRadioTemplate = document.createElement('template');
+editRangeRadioTemplate.innerHTML = `
+    <div class="radio">
+        <label for="id_edit_range">
+            <input id="id_edit_range" type="radio" name="edit_all" value="" checked>
+        </label>
+    </div>`;
+function createCollapseListItem(value) {
+    const template = document.createElement('template');
+    template.innerHTML = `
+        <div class="${constants_1.ns}-collapse-list-item">
+            <div class="hidden-xs ${constants_1.ns}-collapse-original-field">${he_1.default.escape(value)}</div>
+            <div class="hidden-xs form-arrow"></div>
+            <input type="text" class="${constants_1.ns}-collapse-field" value="${he_1.default.escape(value)}" />
+        </div>`;
+    return template.content.firstElementChild.cloneNode(true);
+}
+function appendBulkEditScrobblesHeaderLinkAndMenuItems(element) {
+    if (!authLink || !document.URL.startsWith(authLink.href)) {
+        return; // current page is not the user's profile
+    }
+    appendBulkEditScrobblesHeaderLink(element);
+    appendBulkEditScrobblesMenuItems(element);
+}
+function appendBulkEditScrobblesHeaderLink(element) {
+    var _a;
+    const header = element.querySelector('.library-header');
+    if (header === null) {
+        return; // current page does not contain the header we're looking for
+    }
+    const { form, click } = getBulkEditScrobbleMenuItem(document.URL);
+    const link = document.createElement('a');
+    link.href = 'javascript:void(0)';
+    link.textContent = 'Edit scrobbles (Advanced)';
+    link.addEventListener('click', click);
+    if (((_a = header.lastElementChild) === null || _a === void 0 ? void 0 : _a.tagName) !== 'H2') {
+        header.insertAdjacentText('beforeend', ' · ');
+    }
+    header.insertAdjacentElement('beforeend', link);
+    header.insertAdjacentElement('beforeend', form);
+}
+function appendBulkEditScrobblesMenuItems(element) {
+    const rows = element instanceof HTMLTableRowElement ? [element] : element.querySelectorAll('tr');
+    for (const row of rows) {
+        const link = row.querySelector('a.chartlist-count-bar-link,a.more-item--track[href*="/user/"]');
+        if (!link) {
+            continue; // this is not an artist, album or track
+        }
+        const { form, click } = getBulkEditScrobbleMenuItem(link.href, row);
+        const button = document.createElement('button');
+        button.className = 'mimic-link dropdown-menu-clickable-item more-item--edit-old';
+        button.textContent = 'Edit scrobbles (Advanced)';
+        button.setAttribute('data-analytics-action', 'BulkEditScrobblesOpen');
+        button.addEventListener('click', click);
+        form.style.marginTop = '0';
+        const bulkEditScrobbleMenuItem = document.createElement('li');
+        bulkEditScrobbleMenuItem.appendChild(button);
+        bulkEditScrobbleMenuItem.appendChild(form);
+        bulkEditScrobbleMenuItem.setAttribute('data-processed', 'true');
+        // insert/replace "Edit scrobbles (Advanced)" menu item so it comes after "Edit scrobble"
+        const menu = row.querySelector('.chartlist-more-menu');
+        let editScrobbleMenuItem = undefined;
+        for (const menuItem of menu.children) {
+            if (menuItem.hasAttribute('data-processed')) {
+                menu.removeChild(menuItem);
+            }
+            else if (menuItem.querySelector('button.more-item--edit-old') !== null) {
+                editScrobbleMenuItem = menuItem;
+            }
+        }
+        if (editScrobbleMenuItem) {
+            menu.insertBefore(bulkEditScrobbleMenuItem, editScrobbleMenuItem.nextElementSibling);
+        }
+        else {
+            menu.insertBefore(bulkEditScrobbleMenuItem, menu.firstElementChild);
+        }
+    }
+}
+function getBulkEditScrobbleMenuItem(url, row) {
+    var _a;
+    const urlType = getUrlType(url);
+    // extract date filters from URL
+    const indexOfQuery = url.indexOf('?');
+    const dateFilters = new URLSearchParams();
+    if (indexOfQuery !== -1) {
+        const urlParams = new URLSearchParams(url.substring(indexOfQuery));
+        const datePreset = (_a = urlParams.get('date_preset')) !== null && _a !== void 0 ? _a : '';
+        if (['LAST_7_DAYS', 'LAST_30_DAYS', 'LAST_90_DAYS', 'LAST_180_DAYS', 'LAST_365_DAYS'].includes(datePreset)) {
+            dateFilters.set('date_preset', datePreset);
+        }
+        else {
+            const dateRegExp = /^\d{4}-\d{2}-\d{2}/;
+            const from = urlParams.get('from');
+            const to = urlParams.get('to');
+            if (from && dateRegExp.test(from) && from >= '2002-01-01') {
+                dateFilters.set('from', from);
+            }
+            if (to && dateRegExp.test(to) && to < new Date().toISOString()) {
+                dateFilters.set('to', urlParams.get('to'));
+            }
+        }
+        // remove all query params from URL
+        url = url.substring(0, indexOfQuery);
+    }
+    const form = bulkEditScrobbleFormTemplate.content.firstElementChild.cloneNode(true);
+    const submitButton = form.querySelector('button');
+    let allScrobbleData;
+    let scrobbleData;
+    const click = async () => {
+        if (!allScrobbleData) {
+            const loadingModal = createLoadingModal('Loading Scrobbles...', { dismissible: true, display: 'percentage' });
+            try {
+                allScrobbleData = await fetchScrobbleData(url, dateFilters, loadingModal, loadingModal);
+                if (!loadingModal.isAttached) {
+                    return;
+                }
+            }
+            finally {
+                loadingModal.hide();
+            }
+        }
+        scrobbleData = allScrobbleData;
+        // use JSON strings as album keys to uniquely identify combinations of album + album artists
+        // group scrobbles by album key, case-insensitively because Last.fm doesn't distinguish casings
+        let scrobbleDataGroups = [...groupBy(allScrobbleData, (s) => {
+                var _a, _b;
+                return JSON.stringify({
+                    album_name: (_a = s.get('album_name')) !== null && _a !== void 0 ? _a : '',
+                    album_artist_name: (_b = s.get('album_artist_name')) !== null && _b !== void 0 ? _b : '',
+                }).toLowerCase();
+            })];
+        // sort groups by the amount of scrobbles
+        scrobbleDataGroups = scrobbleDataGroups.sort(([_key1, values1], [_key2, values2]) => values2.length - values1.length);
+        // when editing multiple albums album, show an album selection dialog first
+        if (scrobbleDataGroups.length >= 2) {
+            const noAlbumKey = JSON.stringify({ album_name: '', album_artist_name: '' });
+            let currentAlbumKey = undefined;
+            // put the "No Album" album first
+            scrobbleDataGroups = scrobbleDataGroups.sort(([key1], [key2]) => {
+                if (key1 === noAlbumKey)
+                    return -1;
+                if (key2 === noAlbumKey)
+                    return +1;
+                return 0;
+            });
+            // when the edit dialog was initiated from an album or album track, put that album first in the list
+            if (urlType === 'album' || getUrlType(document.URL) === 'album') {
+                // grab the current album name and artist name from the DOM
+                const album_name = (urlType === 'album' && row
+                    ? row.querySelector('.chartlist-name')
+                    : document.querySelector('.library-header-title')).textContent.trim();
+                const album_artist_name = (urlType === 'album' && row
+                    ? row.querySelector('.chartlist-artist') || document.querySelector('.library-header-title, .library-header-crumb')
+                    : document.querySelector('.text-colour-link')).textContent.trim();
+                currentAlbumKey = JSON.stringify({ album_name, album_artist_name }).toLowerCase();
+                // put the current album first
+                scrobbleDataGroups = scrobbleDataGroups.sort(([key1], [key2]) => {
+                    if (key1 === currentAlbumKey)
+                        return -1;
+                    if (key2 === currentAlbumKey)
+                        return +1;
+                    if (key1 === noAlbumKey)
+                        return -1;
+                    if (key2 === noAlbumKey)
+                        return +1;
+                    return 0;
+                });
+            }
+            const body = document.createElement('div');
+            body.innerHTML = `
+                <div class="form-disclaimer">
+                    <div class="alert alert-info">
+                        ${urlType === 'track' ? 'This track is' : `Tracks from this ${urlType} are`} scrobbled under multiple albums.
+                        Select which albums you would like to edit.
+                        Deselect albums you would like to skip.
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="form-group-controls ${constants_1.ns}-form-group-controls">
+                        <button type="button" class="btn-secondary" id="${constants_1.ns}-select-all">Select all</button>
+                        <button type="button" class="btn-secondary" id="${constants_1.ns}-deselect-all">Deselect all</button>
+                    </div>
+                </div>
+                <ul class="${constants_1.ns}-list">
+                    ${scrobbleDataGroups.map(([key, scrobbleData]) => {
+                var _a;
+                const firstScrobbleData = scrobbleData[0];
+                const album_name = firstScrobbleData.get('album_name');
+                const artist_name = ((_a = firstScrobbleData.get('album_artist_name')) !== null && _a !== void 0 ? _a : firstScrobbleData.get('artist_name'));
+                return `
+                    <li>
+                        <div class="checkbox">
+                            <label>
+                                <input type="checkbox" name="key" value="${he_1.default.escape(key)}" ${currentAlbumKey === undefined || currentAlbumKey === key ? 'checked' : ''} />
+                                <strong title="${he_1.default.escape(album_name !== null && album_name !== void 0 ? album_name : '')}" class="${constants_1.ns}-ellipsis ${currentAlbumKey === key ? `${constants_1.ns}-text-info` : !album_name ? `${constants_1.ns}-text-danger` : ''}">
+                                    ${album_name ? he_1.default.escape(album_name) : '<em>No Album</em>'}
+                                </strong>
+                                <div title="${he_1.default.escape(artist_name)}" class="${constants_1.ns}-ellipsis">
+                                    ${he_1.default.escape(artist_name)}
+                                </div>
+                                <small>
+                                    ${scrobbleData.length} scrobble${scrobbleData.length !== 1 ? 's' : ''}
+                                </small>
+                            </label>
+                        </div>
+                    </li>`;
+            }).join('')}
+                </ul>`;
+            const checkboxes = body.querySelectorAll('input[type="checkbox"]');
+            body.querySelector(`#${constants_1.ns}-select-all`).addEventListener('click', () => {
+                for (const checkbox of checkboxes) {
+                    checkbox.checked = true;
+                }
+            });
+            body.querySelector(`#${constants_1.ns}-deselect-all`).addEventListener('click', () => {
+                for (const checkbox of checkboxes) {
+                    checkbox.checked = false;
+                }
+            });
+            let formData;
+            try {
+                formData = await prompt('Select Albums To Edit', body);
+            }
+            catch (error) {
+                return; // user canceled the album selection dialog
+            }
+            const selectedAlbumKeys = formData.getAll('key');
+            scrobbleData = scrobbleDataGroups
+                .filter(([key]) => selectedAlbumKeys.includes(key))
+                .map(([_, values]) => values)
+                .flat();
+        }
+        if (scrobbleData.length === 0) {
+            alert(`Last.fm reports you haven't listened to this ${urlType}.`);
+            return;
+        }
+        // use a scrobble of the most-played track to trick Last.fm into fetching the Edit Scrobble modal
+        const trackGroups = [...groupBy(scrobbleData, (s) => JSON.stringify({
+                track_name: s.get('track_name'),
+                artist_name: s.get('artist_name'),
+            }).toLowerCase()).values()];
+        const mostPlayedTrackScrobbleData = trackGroups.reduce((a, b) => b.length > a.length ? b : a);
+        applyFormData(form, mostPlayedTrackScrobbleData[0]);
+        submitButton.click();
+    };
+    submitButton.addEventListener('click', async () => {
+        await augmentEditScrobbleForm(scrobbleData, dateFilters);
+    });
+    return { form, click };
+}
+// shows a form dialog and resolves its promise on submit
+function prompt(title, body) {
+    return new Promise((resolve, reject) => {
+        const form = document.createElement('form');
+        form.className = 'form-horizontal';
+        if (body instanceof Element) {
+            form.insertAdjacentElement('beforeend', body);
+        }
+        else {
+            form.insertAdjacentHTML('beforeend', body);
+        }
+        form.insertAdjacentHTML('beforeend', `
+            <div class="form-group form-group--submit">
+                <div class="form-submit">
+                    <button type="reset" class="btn-secondary">Cancel</button>
+                    <button type="submit" class="btn-primary">
+                        <span class="btn-inner">
+                            OK
+                        </span>
+                    </button>
+                </div>
+            </div>`);
+        const content = document.createElement('div');
+        content.className = 'content-form';
+        content.appendChild(form);
+        const modal = new Modal_1.Modal(title, content, {
+            dismissible: true,
+            events: {
+                hide: reject,
+            },
+        });
+        form.addEventListener('reset', () => modal.hide());
+        form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            resolve(new FormData(form));
+            modal.hide();
+        });
+        modal.show();
+    });
+}
+function createLoadingModal(title, options) {
+    const modal = new LoadingModal_1.LoadingModal(title, options);
+    modal.show();
+    return modal;
+}
+// this is a recursive function that browses pages of artists, albums and tracks to gather scrobbles
+async function fetchScrobbleData(url, dateFilters, loadingModal, parentStep) {
+    // remove all query params from URL
+    const indexOfQuery = url.indexOf('?');
+    if (indexOfQuery !== -1) {
+        url = url.substring(0, indexOfQuery);
+    }
+    switch (getUrlType(url)) {
+        case 'artist':
+            if (!url.endsWith('/+tracks')) {
+                url += '/+tracks'; // skip artist overview and go straight to the tracks
+            }
+            break;
+        case 'track':
+            if (!url.includes('/library/music/+noredirect/')) {
+                url = url.replace('/library/music/', '/library/music/+noredirect/'); // avoid redirects
+            }
+            break;
+    }
+    const documentsToFetch = [fetchHTMLDocument(`${url}?${dateFilters.toString()}`)];
+    const firstDocument = await documentsToFetch[0];
+    const paginationList = firstDocument.querySelector('.pagination-list');
+    if (paginationList) {
+        const pageCount = parseInt(paginationList.children[paginationList.children.length - 2].textContent.trim(), 10);
+        const pageNumbersToFetch = [...Array(pageCount - 1).keys()].map((i) => i + 2);
+        documentsToFetch.push(...pageNumbersToFetch.map((n) => fetchHTMLDocument(`${url}?page=${n}&${dateFilters.toString()}`)));
+    }
+    const scrobbleData = await forEachParallel(loadingModal, parentStep, documentsToFetch, async (documentToFetch, step) => {
+        const fetchedDocument = await documentToFetch;
+        const table = fetchedDocument.querySelector('table.chartlist:not(.chartlist__placeholder)');
+        if (!table) {
+            // sometimes a missing chartlist is expected, other times it indicates a failure
+            if (fetchedDocument.body.textContent.includes('There was a problem loading your')) {
+                abort('There was a problem loading your scrobbles, please try again later.');
+            }
+            return [];
+        }
+        const rows = [...table.tBodies[0].rows];
+        // to display accurate loading percentages, tracks with more scrobbles will have more weight
+        const weightFunc = (row) => {
+            const barValue = row.querySelector('.chartlist-count-bar-value');
+            if (barValue === null)
+                return 1;
+            const scrobbleCount = parseInt(barValue.firstChild.textContent.trim().replace(/,/g, ''), 10);
+            return Math.ceil(scrobbleCount / 50); // 50 = items per page on Last.fm
+        };
+        const scrobbleData = await forEachParallel(loadingModal, step, rows, async (row, step) => {
+            const link = row.querySelector('.chartlist-count-bar-link');
+            if (link) {
+                // recursive call to the current function
+                return await fetchScrobbleData(link.href, dateFilters, loadingModal, step);
+            }
+            // no link indicates we're at the scrobble overview
+            const form = row.querySelector('form[data-edit-scrobble]');
+            return [new FormData(form)];
+        }, weightFunc);
+        return scrobbleData.flat();
+    });
+    return scrobbleData.flat();
+}
+function getUrlType(url) {
+    if (albumRegExp.test(url)) {
+        return 'album';
+    }
+    else if (artistRegExp.test(url)) {
+        if (url.endsWith('/+albums')) {
+            return 'album artist';
+        }
+        else {
+            return 'artist';
+        }
+    }
+    else {
+        return 'track';
+    }
+}
+async function fetchHTMLDocument(url) {
+    try {
+        return await (0, utils_1.fetchAndRetry)(url, undefined, async (response, i) => {
+            const html = await response.text();
+            const doc = domParser.parseFromString(html, 'text/html');
+            if (doc.querySelector('table.chartlist:not(.chartlist__placeholder)') || i >= 5) {
+                return doc;
+            }
+        });
+    }
+    catch (error) {
+        const message = `There was a problem loading your scrobbles, please try again later. (${error})`;
+        abort(message);
+        throw message;
+    }
+}
+let aborting = false;
+function abort(message) {
+    if (aborting)
+        return;
+    aborting = true;
+    alert(message);
+    window.location.reload();
+}
+// series for loop that updates the loading percentage
+async function forEach(loadingModal, parentStep, array, callback, weightFunc) {
+    const tuples = array.map((item) => ({ item, step: { completed: false, steps: [], weight: weightFunc ? weightFunc(item) : 1 } }));
+    parentStep.steps.push(...tuples.map((tuple) => tuple.step));
+    loadingModal.refreshProgress();
+    const result = [];
+    for (const tuple of tuples) {
+        result.push(await callback(tuple.item, tuple.step));
+        tuple.step.completed = true;
+        loadingModal.refreshProgress();
+    }
+    return result.flat();
+}
+// parallel for loop that updates the loading percentage
+function forEachParallel(loadingModal, parentStep, array, callback, weightFunc) {
+    const tuples = array.map((item) => ({ item, step: { completed: false, steps: [], weight: weightFunc ? weightFunc(item) : 1 } }));
+    parentStep.steps.push(...tuples.map((tuple) => tuple.step));
+    loadingModal.refreshProgress();
+    return Promise.all(tuples.map(async (tuple) => {
+        const result = await callback(tuple.item, tuple.step);
+        tuple.step.completed = true;
+        loadingModal.refreshProgress();
+        return result;
+    }));
+}
+function applyFormData(form, formData) {
+    for (const [name, value] of formData) {
+        const input = form.querySelector(`input[name="${name}"]`);
+        input.value = value;
+    }
+}
+// augments the default Edit Scrobble form to include new features
+async function augmentEditScrobbleForm(scrobbleData, dateFilters) {
+    var _a;
+    const loadingModal = createLoadingModal('Waiting for Last.fm...', { dismissible: true });
+    let popup;
+    try {
+        popup = await observeChildList(document.body, '.popup_content');
+    }
+    finally {
+        loadingModal.hide();
+    }
+    const title = popup.querySelector('.modal-title');
+    const form = popup.querySelector('form[action$="/library/edit-track?edited-variation=library-track-scrobble"]');
+    title.textContent = `Advanced bulk edit`;
+    // remove traces of the first scrobble that was used to initialize the form
+    const topBox = form.querySelector('.edit-scrobble-top-box');
+    if (topBox) {
+        form.removeChild(topBox);
+    }
+    // prepare scrobble form inputs
+    const track_name_input = form.elements.track_name;
+    const artist_name_input = form.elements.artist_name;
+    const album_name_input = form.elements.album_name;
+    const album_artist_name_input = form.elements.album_artist_name;
+    augmentInput(scrobbleData, popup, form, form.elements.track_name_original, track_name_input, 'tracks');
+    augmentInput(scrobbleData, popup, form, form.elements.artist_name_original, artist_name_input, 'artists');
+    augmentInput(scrobbleData, popup, form, form.elements.album_name_original, album_name_input, 'albums');
+    augmentInput(scrobbleData, popup, form, form.elements.album_artist_name_original, album_artist_name_input, 'album artists');
+    // keep album artist names in sync with the artist names they're equal to
+    const originalArtistNames = [...new Set(scrobbleData.map((s) => s.get('artist_name')))];
+    const getArtistNames = () => {
+        const mapArtistName = createValueMapper(form, artist_name_input);
+        return new Map(originalArtistNames.map((name) => { var _a; return [name, (_a = mapArtistName(name)) !== null && _a !== void 0 ? _a : name]; }));
+    };
+    let previousArtistNames = getArtistNames();
+    const syncAlbumArtistNames = () => {
+        const artistNames = getArtistNames();
+        for (const [originalName, name] of artistNames) {
+            const previousName = previousArtistNames.get(originalName);
+            if (name.toLowerCase() === previousName.toLowerCase()) {
+                continue;
+            }
+            if (album_artist_name_input.placeholder.startsWith('Mixed')) {
+                for (const subInput of getSubInputs(form, album_artist_name_input)) {
+                    if (subInput.value.toLowerCase() === previousName.toLowerCase()) {
+                        subInput.value = name;
+                        subInput.dispatchEvent(new Event('input'));
+                    }
+                }
+            }
+            else if (album_artist_name_input.value.toLowerCase() === previousName.toLowerCase()) {
+                album_artist_name_input.value = name;
+                album_artist_name_input.dispatchEvent(new Event('input'));
+            }
+        }
+        previousArtistNames = artistNames;
+    };
+    artist_name_input.addEventListener('input', syncAlbumArtistNames);
+    for (const subInput of getSubInputs(form, artist_name_input)) {
+        subInput.addEventListener('input', syncAlbumArtistNames);
+    }
+    // update the "Bulk edit" checkbox, which Last.fm doesn't always render
+    const edit_all_input = (_a = form.elements.edit_all) !== null && _a !== void 0 ? _a : createBulkEditCheckbox(form);
+    let edit_range_input = null;
+    if (dateFilters.size === 0) {
+        edit_all_input.checked = true;
+        edit_all_input.disabled = true;
+        edit_all_input.parentElement.style.cursor = 'auto';
+        if (edit_all_input.name) {
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = edit_all_input.name;
+            hiddenInput.value = edit_all_input.value;
+            edit_all_input.parentElement.insertBefore(hiddenInput, edit_all_input.nextElementSibling);
+        }
+    }
+    else {
+        edit_all_input.name = 'edit_all';
+        edit_all_input.type = 'radio';
+        const container = edit_all_input.closest('.checkbox');
+        container.classList.remove('checkbox');
+        container.classList.add('radio');
+        const newRadio = editRangeRadioTemplate.content.firstElementChild.cloneNode(true);
+        container.parentElement.insertBefore(newRadio, container);
+        edit_range_input = form.querySelector('#id_edit_range');
+    }
+    // each exact track, artist, album and album artist combination is considered a distinct scrobble
+    const distinctGroups = groupBy(scrobbleData, (s) => JSON.stringify({
+        track_name: s.get('track_name'),
+        artist_name: s.get('artist_name'),
+        album_name: s.get('album_name'),
+        album_artist_name: s.get('album_artist_name'),
+    }).toLowerCase());
+    // set up the form
+    const submitButton = form.querySelector('button[type="submit"]');
+    let formDataToSubmit = [];
+    refreshFormState();
+    form.addEventListener('input', () => {
+        console.log('input');
+        refreshFormState();
+    });
+    function refreshFormState() {
+        var _a, _b;
+        formDataToSubmit = [];
+        let changedScrobbleCount = 0;
+        if (form.querySelector('.has-error') === null && form.querySelector('.has-success') !== null) {
+            const editScrobble = createScrobbleEditor(form);
+            for (const values of distinctGroups.values()) {
+                const formData = editScrobble(values[0]);
+                if (formData !== null) {
+                    formDataToSubmit.push(formData);
+                    changedScrobbleCount += values.length;
+                }
+            }
+        }
+        // refresh the "Bulk edit" checkbox
+        const trackCountText = distinctGroups.size === 1 ? 'this track' : `${formDataToSubmit.length} tracks`;
+        const scrobbleCount = distinctGroups.size === 1
+            ? scrobbleData.length
+            : changedScrobbleCount;
+        const scrobblesText = dateFilters.size === 0
+            ? `Apply to all (${scrobbleCount}) past scrobbles of ${trackCountText}`
+            : `Apply to ${scrobbleCount === 1 ? '1 scrobble' : `${scrobbleCount} scrobbles`} of ${trackCountText} (${(_b = (_a = document.querySelector('.date-range-picker-button-inner')) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()})`;
+        if (edit_range_input) {
+            edit_range_input.nextSibling.textContent = scrobblesText;
+            edit_all_input.nextSibling.textContent =
+                `Apply to all scrobbles of ${trackCountText} (All time)`;
+        }
+        else {
+            edit_all_input.nextSibling.textContent = scrobblesText;
+        }
+        // refresh the "Automatic edit" checkbox
+        form.elements.create_automatic_edit_rule.nextSibling.textContent =
+            `Apply to all future scrobbles of ${trackCountText}`;
+        // disable the submit button when there is nothing to submit
+        submitButton.disabled = formDataToSubmit.length === 0;
+    }
+    // set up the form submit event listener
+    submitButton.addEventListener('click', async (event) => {
+        event.preventDefault();
+        if (formDataToSubmit.length === 0 || submitButton.disabled) {
+            return;
+        }
+        // formDataToSubmit is based on one scrobble per distinct group by default
+        // use all scrobbleData if Bulk edit is not checked
+        if (!new FormData(form).get('edit_all')) {
+            formDataToSubmit = determineFormDataToSubmit(form, scrobbleData);
+        }
+        if (formDataToSubmit.length > 1) {
+            for (const element of form.elements) {
+                if (element instanceof HTMLInputElement && element.dataset['confirm'] && isMerging(form, element)) {
+                    if (!confirm(element.dataset['confirm'])) {
+                        return; // stop submit
+                    }
+                }
+            }
+        }
+        // hide the Edit Scrobble form
+        const cancelButton = form.querySelector('button.js-close');
+        cancelButton.click();
+        const loadingModal = createLoadingModal('Saving Edits...', { dismissible: false, display: 'count' });
+        const parentStep = loadingModal;
+        // run edits in series, inconsistencies will arise if you use a parallel loop
+        await forEach(loadingModal, parentStep, formDataToSubmit, async (formData) => {
+            // Edge does not support passing formData into URLSearchParams() constructor
+            const body = new URLSearchParams();
+            for (const [name, value] of formData) {
+                body.append(name, value);
+            }
+            const response = await (0, utils_1.fetchAndRetry)(form.action, { method: 'POST', body: body });
+            const html = await response.text();
+            // use DOMParser to check the response for alerts
+            const placeholder = domParser.parseFromString(html, 'text/html');
+            for (const message of placeholder.querySelectorAll('.alert-danger')) {
+                alert(message.textContent.trim()); // TODO: pretty validation messages
+            }
+        });
+        // Last.fm sometimes displays old data when reloading too fast, so wait 1 second
+        setTimeout(() => { window.location.reload(); }, 1000);
+    });
+}
+// creates a "Bulk edit" section like the one Last.fm renders, placed above the "Automatic edit" section
+function createBulkEditCheckbox(form) {
+    const automaticEditSection = form.elements.create_automatic_edit_rule.closest('.edit-scrobble-form > div');
+    const section = bulkEditSectionTemplate.content.firstElementChild.cloneNode(true);
+    automaticEditSection.parentElement.insertBefore(section, automaticEditSection);
+    return section.querySelector('input');
+}
+// helper function that completes when a matching element gets appended
+function observeChildList(target, selector) {
+    return new Promise((resolve) => {
+        const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node instanceof Element && node.matches(selector)) {
+                        observer.disconnect();
+                        resolve(node);
+                        return;
+                    }
+                }
+            }
+        });
+        observer.observe(target, { childList: true });
+    });
+}
+// turns a normal input into an input that supports the "Mixed" state
+function augmentInput(scrobbleData, popup, form, originalInput, input, plural) {
+    var _a, _b, _c;
+    const formGroup = input.closest('.form-group');
+    const inputContainer = document.createElement('div');
+    inputContainer.style.width = '100%';
+    input.insertAdjacentElement('afterend', inputContainer);
+    inputContainer.appendChild(input);
+    // group values case-insensitively because Last.fm doesn't distinguish casings, and display each group's most common casing
+    const groups = [...groupBy(scrobbleData, (s) => { var _a, _b; return (_b = (_a = s.get(input.name)) === null || _a === void 0 ? void 0 : _a.toLowerCase()) !== null && _b !== void 0 ? _b : null; }).values()]
+        .map((values) => [getMostCommonValue(values.map((s) => s.get(input.name))), values])
+        .sort((a, b) => b[1].length - a[1].length);
+    const subInputs = [];
+    if (groups.length >= 2) {
+        // display the "Mixed" placeholder when there are two or more possible values
+        originalInput.value = '';
+        originalInput.placeholder = 'Mixed';
+        input.value = '';
+        input.placeholder = 'Mixed';
+        input.required = false;
+        // remove the "Originally" text that only shows on small screens
+        let elementToRemove = formGroup.previousElementSibling;
+        while (elementToRemove !== null) {
+            if (elementToRemove.classList.contains('edit-scrobble-label--originally')) {
+                elementToRemove.parentElement.removeChild(elementToRemove);
+                break;
+            }
+            elementToRemove = elementToRemove.previousElementSibling;
+        }
+        // add collapse elements
+        const collapseButton = document.createElement('button');
+        collapseButton.type = 'button';
+        collapseButton.className = `${constants_1.ns}-title`;
+        const maxFigureLength = groups[0][1].length.toString().length;
+        const collapseInfo = document.createElement('span');
+        collapseInfo.className = `${constants_1.ns}-title`;
+        collapseInfo.textContent = '…';
+        collapseInfo.tabIndex = -1;
+        collapseInfo.title = groups
+            .map(([key, values]) => {
+            const figureLength = values.length.toString().length;
+            const figureSpaces = '\u2007'.repeat(maxFigureLength - figureLength);
+            return `${figureSpaces}${values.length}x ${key !== null && key !== void 0 ? key : ''}`;
+        })
+            .join('\n');
+        const collapseContainer = document.createElement('div');
+        collapseContainer.className = `${constants_1.ns}-collapse-list`;
+        collapseContainer.style.marginTop = '0';
+        for (const [key] of groups) {
+            const listItem = createCollapseListItem((_a = key === null || key === void 0 ? void 0 : key.toString()) !== null && _a !== void 0 ? _a : '');
+            collapseContainer.appendChild(listItem);
+            const subInput = listItem.querySelector('input');
+            subInput.dataset['mixedFor'] = input.name;
+            subInput.dataset['original'] = (_b = key === null || key === void 0 ? void 0 : key.toString()) !== null && _b !== void 0 ? _b : '';
+            subInputs.push(subInput);
+        }
+        collapseButton.addEventListener('click', () => {
+            collapseButton.textContent = `${collapseContainer.style.display === 'none' ? '⯆' : '⯈'} ${groups.length} ${plural}`;
+            collapseInfo.style.display = collapseContainer.style.display === 'none' ? 'none' : '';
+            collapseContainer.style.display = collapseContainer.style.display === 'none' ? '' : 'none';
+        });
+        collapseButton.click();
+        formGroup.insertAdjacentElement('afterend', collapseButton);
+        collapseButton.insertAdjacentElement('afterend', collapseInfo);
+        collapseButton.insertAdjacentText('afterend', ' ');
+        collapseInfo.insertAdjacentElement('afterend', collapseContainer);
+        input.dataset['confirm'] = `You are about to merge scrobbles for ${groups.length} ${plural}. This cannot be undone. Would you like to continue?`;
+        // datalist: a native HTML5 autocomplete feature
+        const datalist = document.createElement('datalist');
+        datalist.id = `${constants_1.ns}-${popup.id}-${input.name}-datalist`;
+        for (const [value] of groups) {
+            const option = document.createElement('option');
+            option.value = (_c = value) !== null && _c !== void 0 ? _c : '';
+            datalist.appendChild(option);
+        }
+        input.autocomplete = 'off';
+        input.setAttribute('list', datalist.id);
+        formGroup.insertBefore(datalist, input.nextElementSibling);
+        // event listeners
+        const onInput = () => {
+            input.placeholder = '';
+            for (const subInput of subInputs) {
+                subInput.value = input.value;
+            }
+            refreshInputState();
+        };
+        input.addEventListener('input', onInput);
+        input.addEventListener('keydown', (event) => {
+            if (input.value === ''
+                && input.placeholder !== ''
+                && (event.keyCode === 8 || event.keyCode === 46)) { // backspace or delete
+                onInput();
+            }
+        });
+        for (const subInput of subInputs) {
+            subInput.addEventListener('input', () => {
+                // go back to the untouched "Mixed" state when every sub-input is reverted to its original value
+                const isChanged = subInputs.some((x) => x.value.toLowerCase() !== x.dataset['original'].toLowerCase());
+                input.value = '';
+                input.placeholder = isChanged ? 'Mixed (changed)' : 'Mixed';
+                refreshInputState();
+            });
+        }
+    }
+    else {
+        input.addEventListener('input', () => {
+            refreshInputState();
+        });
+    }
+    // display green color when field was edited, red if it's not allowed to be empty
+    const defaultValue = input.value;
+    if (input.name === 'album_name') {
+        form.elements.album_artist_name.addEventListener('input', () => {
+            refreshInputState();
+        });
+    }
+    else if (input.name === 'album_artist_name') {
+        form.elements.album_name.addEventListener('input', () => {
+            if (input.placeholder !== 'Mixed' && input.value.trim() === '' && form.elements.album_name.value.trim() !== '') {
+                input.value = form.elements.artist_name.value;
+                input.placeholder = '';
+            }
+            refreshInputState();
+        });
+    }
+    function refreshInputState() {
+        inputContainer.classList.remove('has-error');
+        inputContainer.classList.remove('has-success');
+        const isEmpty = input.value.trim() === '' && input.placeholder === '';
+        if ((isEmpty || subInputs.some(x => x.value.trim() === ''))
+            && (input.name === 'track_name'
+                || input.name === 'album_name' && (subInputs.length === 0 || isEmpty) && (form.elements.album_artist_name.value.trim() !== '' || form.elements.album_artist_name.placeholder !== '')
+                || input.name === 'artist_name'
+                || input.name === 'album_artist_name' && (form.elements.album_name.value.trim() !== '' || form.elements.album_name.placeholder !== ''))) {
+            inputContainer.classList.add('has-error');
+        }
+        else if (input.value.toLowerCase() !== defaultValue.toLowerCase() || groups.length >= 2 && input.placeholder !== 'Mixed') {
+            inputContainer.classList.add('has-success');
+        }
+    }
+}
+function groupBy(array, keyFunc) {
+    const map = new Map();
+    for (const item of array) {
+        const key = keyFunc(item);
+        const value = map.get(key);
+        if (!value) {
+            map.set(key, [item]);
+        }
+        else {
+            value.push(item);
+        }
+    }
+    return map;
+}
+function getMostCommonValue(values) {
+    return [...groupBy(values, (value) => value)].sort((a, b) => b[1].length - a[1].length)[0][0];
+}
+function determineFormDataToSubmit(form, scrobbleData) {
+    const editScrobble = createScrobbleEditor(form);
+    return scrobbleData
+        .map(editScrobble)
+        .filter((formData) => formData !== null);
+}
+// returns a function that creates the form data to submit for a scrobble, or null if the scrobble wouldn't change
+function createScrobbleEditor(form) {
+    const formData = new FormData(form);
+    const mapTrackName = createValueMapper(form, form.elements.track_name);
+    const mapArtistName = createValueMapper(form, form.elements.artist_name);
+    const mapAlbumName = createValueMapper(form, form.elements.album_name);
+    const mapAlbumArtistName = createValueMapper(form, form.elements.album_artist_name);
+    return (originalData) => {
+        var _a, _b, _c, _d, _e, _f;
+        const track_name_original = originalData.get('track_name');
+        const artist_name_original = originalData.get('artist_name');
+        const album_name_original = ((_a = originalData.get('album_name')) !== null && _a !== void 0 ? _a : '');
+        const album_artist_name_original = ((_b = originalData.get('album_artist_name')) !== null && _b !== void 0 ? _b : '');
+        const track_name = (_c = mapTrackName(track_name_original)) !== null && _c !== void 0 ? _c : track_name_original;
+        const artist_name = (_d = mapArtistName(artist_name_original)) !== null && _d !== void 0 ? _d : artist_name_original;
+        const album_name = (_e = mapAlbumName(album_name_original)) !== null && _e !== void 0 ? _e : album_name_original;
+        const album_artist_name = (_f = mapAlbumArtistName(album_artist_name_original)) !== null && _f !== void 0 ? _f : album_artist_name_original;
+        // check if anything changed compared to the original track, artist, album and album artist combination
+        // Last.fm doesn't accept case-only changes, so those don't count, but the entered casing is still submitted
+        if (track_name.toLowerCase() === track_name_original.toLowerCase() &&
+            artist_name.toLowerCase() === artist_name_original.toLowerCase() &&
+            album_name.toLowerCase() === album_name_original.toLowerCase() &&
+            album_artist_name.toLowerCase() === album_artist_name_original.toLowerCase()) {
+            return null;
+        }
+        const clonedFormData = cloneFormData(formData);
+        // Last.fm expects a timestamp
+        clonedFormData.set('timestamp', originalData.get('timestamp'));
+        // populate the *_original fields to instruct Last.fm which scrobbles need to be edited
+        clonedFormData.set('track_name_original', track_name_original);
+        clonedFormData.set('track_name', track_name);
+        clonedFormData.set('artist_name_original', artist_name_original);
+        clonedFormData.set('artist_name', artist_name);
+        clonedFormData.set('album_name_original', album_name_original);
+        clonedFormData.set('album_name', album_name);
+        clonedFormData.set('album_artist_name_original', album_artist_name_original);
+        clonedFormData.set('album_artist_name', album_artist_name);
+        clonedFormData.set('ajax', '1');
+        return clonedFormData;
+    };
+}
+// returns a function that maps an original value to its new value, or to null if the input was left untouched
+// untouched inputs keep each scrobble's original casing, instead of the casing the input happens to display
+function createValueMapper(form, input) {
+    if (input.placeholder === 'Mixed') {
+        return () => null;
+    }
+    const subInputs = getSubInputs(form, input);
+    if (input.placeholder === 'Mixed (changed)') {
+        // each edited sub-input holds the new value for one of the original values
+        const newValues = new Map(subInputs
+            .filter((subInput) => subInput.value !== subInput.dataset['original'])
+            .map((subInput) => [subInput.dataset['original'].toLowerCase(), subInput.value]));
+        return (originalValue) => { var _a; return (_a = newValues.get(originalValue.toLowerCase())) !== null && _a !== void 0 ? _a : null; };
+    }
+    if (subInputs.length === 0 && input.value === input.defaultValue) {
+        return () => null;
+    }
+    const value = input.value;
+    return () => value;
+}
+// sub-inputs are the inputs listed under a Mixed input, one per original value
+function getSubInputs(form, input) {
+    return [...form.querySelectorAll(`input[data-mixed-for="${input.name}"]`)];
+}
+// a Mixed input merges scrobbles when it maps two or more original values to the same new value
+function isMerging(form, input) {
+    if (input.placeholder === 'Mixed') {
+        return false;
+    }
+    if (input.placeholder === 'Mixed (changed)') {
+        const newValues = getSubInputs(form, input).map((subInput) => subInput.value);
+        return new Set(newValues.map((value) => value.toLowerCase())).size < newValues.length;
+    }
+    return true;
+}
+function cloneFormData(formData) {
+    const clonedFormData = new FormData();
+    for (const [name, value] of formData) {
+        clonedFormData.append(name, value);
+    }
+    return clonedFormData;
+}
+
+
+/***/ },
+
+/***/ 641
+(__unused_webpack_module, exports) {
+
+"use strict";
+var __webpack_unused_export__;
+
+__webpack_unused_export__ = ({ value: true });
+exports.createTimestampLinks = createTimestampLinks;
+async function createTimestampLinks(element) {
+    var _a;
+    const libraryHref = (_a = document.querySelector('.secondary-nav-item--library a')) === null || _a === void 0 ? void 0 : _a.getAttribute('href');
+    if (!libraryHref || !document.URL.includes(libraryHref + '/')) {
+        return;
+    }
+    const cells = element.querySelectorAll('.chartlist-timestamp');
+    for (const cell of cells) {
+        const span = cell.querySelector('span[title]');
+        if (span === null || span.parentNode !== cell) {
+            continue;
+        }
+        let date;
+        if (cell.classList.contains('chartlist-timestamp--lang-en')) {
+            date = new Date(Date.parse(span.title.split(',')[0]));
+        }
+        else {
+            // Languages other than English are not supported.
+            continue;
+        }
+        const dateString = getDateString(date);
+        const link = document.createElement('a');
+        link.href = `${libraryHref}?from=${dateString}&to=${dateString}`;
+        cell.insertBefore(link, span);
+        link.appendChild(span);
+    }
+}
+function getDateString(date) {
+    let s = date.getFullYear() + '-';
+    const month = date.getMonth() + 1;
+    if (month < 10)
+        s += '0';
+    s += month + '-';
+    const day = date.getDate();
+    if (day < 10)
+        s += '0';
+    s += day;
+    return s;
+}
+
+
+/***/ },
+
+/***/ 308
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+var __webpack_unused_export__;
+
+__webpack_unused_export__ = ({ value: true });
+exports.displayAlbumName = displayAlbumName;
+const constants_1 = __webpack_require__(921);
+async function displayAlbumName(element) {
+    var _a, _b;
+    const rows = element instanceof HTMLTableRowElement ? [element] : element.querySelectorAll('tr');
+    if (rows.length === 0) {
+        return;
+    }
+    const baseHref = (_a = document.querySelector('.secondary-nav-item--overview a')) === null || _a === void 0 ? void 0 : _a.getAttribute('href');
+    for (const row of rows) {
+        // Ignore non-chartlist rows.
+        if (!row.matches('.chartlist-row[data-edit-scrobble-id]')) {
+            continue;
+        }
+        // Ignore non-chartlist tables and tables with an index.
+        const table = row.closest('table');
+        if (table === null || !table.matches('.chartlist:not(.chartlist--with-index)')) {
+            continue;
+        }
+        // Ignore rows without a cover art image or cover art placeholder.
+        const coverArtAnchor = row.querySelector('.cover-art');
+        if (coverArtAnchor === null) {
+            continue;
+        }
+        // Extract album link and name from cover art and scrobble edit form.
+        const albumHref = coverArtAnchor.getAttribute('href');
+        const form = row.querySelector('form[data-edit-scrobble]:not([data-bulk-edit-scrobbles])');
+        let albumName;
+        if (form !== null) {
+            const formData = new FormData(form);
+            albumName = (_b = formData.get('album_name')) === null || _b === void 0 ? void 0 : _b.toString();
+        }
+        else {
+            albumName = coverArtAnchor.querySelector('img').alt;
+        }
+        // Create and insert th element.
+        if (!table.classList.contains(`${constants_1.ns}-chartlist-scrobbles`)) {
+            table.classList.add(`${constants_1.ns}-chartlist-scrobbles`);
+            const albumHeaderCell = document.createElement('th');
+            albumHeaderCell.textContent = 'Album';
+            const headerRow = table.tHead.rows[0];
+            headerRow.insertBefore(albumHeaderCell, headerRow.children[4]);
+        }
+        // Create and insert td element.
+        const albumCell = document.createElement('td');
+        albumCell.className = 'chartlist-album';
+        if (albumHref && albumName) {
+            const albumAnchor = document.createElement('a');
+            albumAnchor.href = albumHref;
+            albumAnchor.title = albumName;
+            albumAnchor.textContent = albumName;
+            albumCell.appendChild(albumAnchor);
+        }
+        else {
+            const noAlbumText = document.createElement('em');
+            noAlbumText.className = `${constants_1.ns}-text-danger`;
+            noAlbumText.textContent = 'No Album';
+            albumCell.appendChild(noAlbumText);
+        }
+        const nameCell = row.querySelector('.chartlist-name');
+        row.insertBefore(albumCell, nameCell.nextElementSibling);
+        // Add menu items.
+        if (albumHref && albumName) {
+            const menu = row.querySelector('.chartlist-more-menu');
+            const albumMenuItem1 = document.createElement('li');
+            const menuItemAnchor1 = document.createElement('a');
+            menuItemAnchor1.href = albumHref;
+            menuItemAnchor1.className = 'dropdown-menu-clickable-item more-item--album';
+            menuItemAnchor1.textContent = 'Go to album';
+            albumMenuItem1.appendChild(menuItemAnchor1);
+            const albumMenuItem2 = document.createElement('li');
+            const menuItemAnchor2 = document.createElement('a');
+            menuItemAnchor2.href = baseHref + '/library' + albumHref;
+            menuItemAnchor2.className = 'dropdown-menu-clickable-item more-item--album';
+            menuItemAnchor2.textContent = 'Go to album in library';
+            albumMenuItem2.appendChild(menuItemAnchor2);
+            const artistMenuItem = menu.querySelector('.more-item--artist').parentNode;
+            menu.insertBefore(albumMenuItem1, artistMenuItem);
+            menu.insertBefore(albumMenuItem2, artistMenuItem);
+        }
+    }
+}
+
+
+/***/ },
+
+/***/ 252
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.enhanceAutomaticEditsPage = enhanceAutomaticEditsPage;
+const he_1 = __importDefault(__webpack_require__(488));
+const tiny_async_pool_1 = __importDefault(__webpack_require__(692));
+const constants_1 = __webpack_require__(921);
+const utils_1 = __webpack_require__(135);
+const toolbarTemplate = document.createElement('template');
+toolbarTemplate.innerHTML = `
+    <div>
+        <span></span> <select></select>
+    </div>`;
+const domParser = new DOMParser();
+const sortFieldsBySuffix = {
+    track: { key: 'track_name', label: 'track' },
+    album: { key: 'album_name', label: 'album' },
+    artist: { key: 'artist_name', label: 'artist' },
+    track_artist: { key: 'artist_name', label: 'artist' },
+    album_artist: { key: 'album_artist_name', label: 'album artist' },
+};
+// Last.fm sorts by original values with "from_" options (e.g. from_album), and by edited values with "to_" options (e.g. to_album),
+// sorting by modification date has no field to navigate by
+function getSortField(sort) {
+    const match = /^(from|to)_(.+)$/.exec(sort);
+    const sortField = match ? sortFieldsBySuffix[match[2]] : undefined;
+    return sortField ? { ...sortField, edited: match[1] === 'to' } : undefined;
+}
+// the items depend on the list options, and are reset when those change
+let itemsOptionsKey = undefined;
+const itemMap = new Map();
+let scrollItemIntoView = false;
+let loadPagesPromise = undefined;
+let loadPagesProgressText = '';
+async function enhanceAutomaticEditsPage(element) {
+    var _a;
+    if (!document.URL.includes('/settings/subscription/automatic-edits')) {
+        return;
+    }
+    const section = (_a = element.closest('#subscription-corrections')) !== null && _a !== void 0 ? _a : element.querySelector('#subscription-corrections');
+    if (!section) {
+        return;
+    }
+    observeSection(section);
+    enhanceSection(section);
+}
+const observedSections = new WeakSet();
+// Last.fm loads and replaces the contents of the section itself when paginating or sorting,
+// which doesn't necessarily add new elements, so watch the section for any change
+function observeSection(section) {
+    if (observedSections.has(section)) {
+        return;
+    }
+    observedSections.add(section);
+    const observer = new MutationObserver(() => enhanceSection(section));
+    observer.observe(section, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['data-enhanced'],
+    });
+    // Last.fm can replace the toolbar with a copy of its HTML, which loses event listeners,
+    // so listen on the section instead, which also receives change events from copies
+    section.addEventListener('change', (event) => {
+        const itemSelect = event.target;
+        const toolbar = itemSelect instanceof HTMLSelectElement ? itemSelect.closest(`.${constants_1.ns}-toolbar`) : null;
+        if (toolbar) {
+            goToItem(itemSelect, toolbar);
+        }
+    });
+}
+function goToItem(itemSelect, toolbar) {
+    const selectedItem = itemMap.get(itemSelect.value);
+    if (!selectedItem) {
+        return;
+    }
+    const anchor = document.createElement('a');
+    anchor.href = `?${toolbar.dataset['options']}&page=${selectedItem.pageNumber}&go-to=${(0, utils_1.encodeURIComponent2)(selectedItem.name)}`;
+    document.body.appendChild(anchor);
+    scrollItemIntoView = true;
+    anchor.click();
+    document.body.removeChild(anchor);
+}
+// safe to call repeatedly, rows and the toolbar are only enhanced or added when needed
+function enhanceSection(section) {
+    const table = section.querySelector('.edits-list table.chart-table');
+    if (!table) {
+        return;
+    }
+    const options = getListOptions(section);
+    const sortField = getSortField(options.sort);
+    const keys = table.classList.contains('automatic-album-edits')
+        ? ['album_name', 'album_artist_name']
+        : ['track_name', 'artist_name', 'album_name', 'album_artist_name'];
+    enhanceTable(table, keys, sortField);
+    // TODO: revive "Go to" select feature
+    const toolbar = section.querySelector(`.${constants_1.ns}-toolbar`);
+    if (!sortField) {
+        toolbar === null || toolbar === void 0 ? void 0 : toolbar.remove();
+    }
+    else if ((toolbar === null || toolbar === void 0 ? void 0 : toolbar.dataset['options']) !== getOptionsKey(options)) {
+        toolbar === null || toolbar === void 0 ? void 0 : toolbar.remove();
+        addToolbar(section, table, options, sortField);
+    }
+    else {
+        syncToolbar();
+    }
+}
+// a toolbar that Last.fm put back can be outdated, only touch it when it is, to avoid triggering the observer endlessly
+function syncToolbar() {
+    const itemSelect = document.querySelector(`.${constants_1.ns}-toolbar select`);
+    if (itemSelect && itemSelect.options.length !== itemMap.size) {
+        renderItemSelect();
+    }
+    const progressElement = document.querySelector(`.${constants_1.ns}-toolbar-progress`);
+    if (progressElement && loadPagesProgressText === '') {
+        progressElement.remove();
+    }
+    else if (progressElement && progressElement.textContent !== loadPagesProgressText) {
+        progressElement.textContent = loadPagesProgressText;
+    }
+}
+// the URL doesn't always contain every option, e.g. switching the display preference drops the sort parameters,
+// so read the options from the selected items in Last.fm's "Original name" and "Sort by" menus, and fall back to the URL
+function getListOptions(section) {
+    var _a, _b, _c, _d, _e;
+    const params = new URLSearchParams(location.search);
+    const selectedDisplay = section.querySelector('#automatic-edit-view-options .display-options-clickable-item--selected');
+    const selectedSort = section.querySelector('#automatic-edit-sort-options .display-options-clickable-item--selected');
+    let sortDirection = (_a = params.get('sort-direction')) !== null && _a !== void 0 ? _a : 'asc';
+    if (selectedSort === null || selectedSort === void 0 ? void 0 : selectedSort.classList.contains('display-options-clickable-item--asc')) {
+        sortDirection = 'asc';
+    }
+    else if (selectedSort === null || selectedSort === void 0 ? void 0 : selectedSort.classList.contains('display-options-clickable-item--desc')) {
+        sortDirection = 'desc';
+    }
+    return {
+        displayPreference: (_c = (_b = selectedDisplay === null || selectedDisplay === void 0 ? void 0 : selectedDisplay.dataset['display']) !== null && _b !== void 0 ? _b : params.get('display-preference')) !== null && _c !== void 0 ? _c : 'original',
+        sort: (_e = (_d = selectedSort === null || selectedSort === void 0 ? void 0 : selectedSort.dataset['sort']) !== null && _d !== void 0 ? _d : params.get('sort')) !== null && _e !== void 0 ? _e : 'modification_date',
+        sortDirection,
+    };
+}
+function getOptionsKey(options) {
+    return new URLSearchParams({
+        'display-preference': options.displayPreference,
+        'sort': options.sort,
+        'sort-direction': options.sortDirection,
+    }).toString();
+}
+// the value of the sort field that the table is sorted by, which is either the original or the edited value
+function getItemName(formData, sortField) {
+    const name = sortField.edited
+        ? formData.get(sortField.key)
+        : formData.get(`${sortField.key}_original`);
+    return name.toString();
+}
+async function addToolbar(section, table, options, sortField) {
+    var _a;
+    const paginationList = section.querySelector('.pagination-list');
+    if (!paginationList) {
+        return;
+    }
+    const paginationListItems = [...paginationList.querySelectorAll('.pagination-page')];
+    const currentPageNumber = parseInt(paginationListItems.find(x => x.getAttribute('aria-current') === 'page').textContent, 10);
+    const pageCount = parseInt(paginationListItems[paginationListItems.length - 1].textContent, 10);
+    if (pageCount === 1) {
+        return;
+    }
+    const optionsKey = getOptionsKey(options);
+    if (itemsOptionsKey !== optionsKey) {
+        itemsOptionsKey = optionsKey;
+        itemMap.clear();
+        loadPagesPromise = undefined;
+    }
+    const toolbar = toolbarTemplate.content.firstElementChild.cloneNode(true);
+    toolbar.className = `${constants_1.ns}-toolbar`;
+    toolbar.dataset['options'] = optionsKey;
+    toolbar.querySelector('span').textContent = `Go to ${sortField.label}:`;
+    // place the toolbar below the heading and table options, or at the top if Last.fm's layout changed
+    const tableContainer = section.querySelector(':scope > .automatic-edits-table-container');
+    if (tableContainer) {
+        tableContainer.after(toolbar);
+    }
+    else {
+        section.prepend(toolbar);
+    }
+    const progressElement = document.createElement('span');
+    progressElement.className = `${constants_1.ns}-toolbar-progress`;
+    progressElement.textContent = loadPagesProgressText;
+    toolbar.insertAdjacentText('beforeend', ' ');
+    toolbar.insertAdjacentElement('beforeend', progressElement);
+    renderItemSelect();
+    loadPagesPromise !== null && loadPagesPromise !== void 0 ? loadPagesPromise : (loadPagesPromise = loadPages(table, currentPageNumber, pageCount, options, sortField));
+    await loadPagesPromise;
+    // an empty progress text means loading is done, unless loading restarted for other list options in the meantime
+    if (itemsOptionsKey === optionsKey) {
+        loadPagesProgressText = '';
+        (_a = document.querySelector(`.${constants_1.ns}-toolbar-progress`)) === null || _a === void 0 ? void 0 : _a.remove();
+    }
+}
+// Last.fm can take the toolbar out of the page and put it back later, while another toolbar was added in the meantime,
+// so never hold on to toolbar elements, but always look up the toolbar that is currently on the page
+function renderItemSelect() {
+    const itemSelect = document.querySelector(`.${constants_1.ns}-toolbar select`);
+    if (!itemSelect) {
+        return;
+    }
+    const selectedItemKey = getSelectedItemKey();
+    itemSelect.replaceChildren();
+    // respect the order in which Last.fm sorts the table, pages can finish loading in any order
+    for (const item of [...itemMap.values()].sort((a, b) => a.pageNumber - b.pageNumber || a.rowIndex - b.rowIndex)) {
+        const option = document.createElement('option');
+        option.value = item.key;
+        option.text = item.name;
+        itemSelect.appendChild(option);
+    }
+    // keep nothing selected, unless an item was navigated to
+    itemSelect.value = selectedItemKey !== null && selectedItemKey !== void 0 ? selectedItemKey : '';
+    if (itemSelect.value !== selectedItemKey) {
+        itemSelect.selectedIndex = -1;
+    }
+}
+function enhanceTable(table, keys, sortField) {
+    document.body.style.backgroundColor = '#fff';
+    table.style.tableLayout = 'auto';
+    // TODO: revive clickable headers feature
+    // for (const cell of table.tHead!.rows[0].cells) {
+    //     cell.innerHTML = `<a href="javascript:void(0)" role="button">${cell.textContent}</a>`;
+    // }
+    for (const row of table.tBodies[0].rows) {
+        enhanceRow(row, keys, sortField);
+    }
+}
+function enhanceRow(row, keys, sortField) {
+    if (row.dataset['enhanced'] === 'true') {
+        return;
+    }
+    row.dataset['enhanced'] = 'true';
+    const formData = getFormData(row);
+    function emphasize(cell, editedValue, originalValue) {
+        cell.style.lineHeight = '1';
+        cell.innerHTML = `
+            <div>
+                <span class="sr-only">
+                    ${he_1.default.escape(originalValue)}
+                </span>
+                <b>
+                    ${he_1.default.escape(editedValue)}
+                </b>
+            </div>
+            <small>
+                Originally "${he_1.default.escape(originalValue)}"
+            </small>`;
+    }
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        const editedValue = formData.get(key).toString();
+        const originalValue = formData.get(`${key}_original`).toString();
+        if (editedValue !== originalValue) {
+            emphasize(row.cells[i], editedValue, originalValue);
+        }
+        else if (i === 0) {
+            // remove bold
+            row.cells[0].innerHTML = row.cells[0].textContent;
+        }
+    }
+    if (sortField && getItemName(formData, sortField).toLowerCase() === getSelectedItemKey()) {
+        row.classList.add(`${constants_1.ns}-highlight`);
+        if (scrollItemIntoView) {
+            scrollItemIntoView = false;
+            row.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+}
+function getFormData(row) {
+    return new FormData(row.querySelector('form'));
+}
+function getSelectedItemKey() {
+    var _a;
+    return (_a = new URLSearchParams(location.search).get('go-to')) === null || _a === void 0 ? void 0 : _a.toLowerCase();
+}
+async function loadPages(table, currentPageNumber, pageCount, options, sortField) {
+    const optionsKey = getOptionsKey(options);
+    const currentPage = { pageNumber: currentPageNumber, rows: [...table.tBodies[0].rows] };
+    const pages = [currentPage];
+    const pageNumbersToLoad = [...Array(pageCount).keys()].map(i => i + 1).filter(i => i !== currentPageNumber);
+    addItems(currentPage, sortField);
+    updateProgressText(1, pageCount);
+    for await (const page of (0, tiny_async_pool_1.default)(6, pageNumbersToLoad, (pageNumber) => loadPage(pageNumber, optionsKey))) {
+        // stop when the list options changed in the meantime
+        if (itemsOptionsKey !== optionsKey) {
+            break;
+        }
+        pages.push(page);
+        addItems(page, sortField);
+        updateProgressText(pages.length, pageCount);
+    }
+    pages.sort((a, b) => a.pageNumber < b.pageNumber ? -1 : 1);
+    return pages;
+}
+async function loadPage(pageNumber, optionsKey) {
+    const response = await (0, utils_1.fetchAndRetry)(`?${optionsKey}&page=${pageNumber}&_pjax=%23content`, {
+        credentials: 'include',
+        headers: {
+            'X-Pjax': 'true',
+            'X-Pjax-Container': '#content',
+        },
+    });
+    const text = await response.text();
+    const doc = domParser.parseFromString(text, 'text/html');
+    const table = doc.querySelector('.edits-list table.chart-table');
+    return {
+        pageNumber,
+        rows: [...table.tBodies[0].rows],
+    };
+}
+function addItems(page, sortField) {
+    for (const [rowIndex, row] of page.rows.entries()) {
+        const formData = getFormData(row);
+        const name = getItemName(formData, sortField);
+        const key = name.toLowerCase();
+        const item = itemMap.get(key);
+        if (!item) {
+            itemMap.set(key, { key, name, pageNumber: page.pageNumber, rowIndex });
+        }
+        else if (item.pageNumber > page.pageNumber) {
+            item.pageNumber = page.pageNumber;
+            item.rowIndex = rowIndex;
+        }
+    }
+    renderItemSelect();
+}
+function updateProgressText(current, total) {
+    loadPagesProgressText = `${current} / ${total} (${(current * 100 / total).toFixed(0)}%)`;
+    const progressElement = document.querySelector(`.${constants_1.ns}-toolbar-progress`);
+    if (progressElement) {
+        progressElement.textContent = loadPagesProgressText;
+    }
+}
+
+
+/***/ },
+
+/***/ 694
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+var __webpack_unused_export__;
+
+__webpack_unused_export__ = ({ value: true });
+exports.LoadingModal = void 0;
+const constants_1 = __webpack_require__(921);
+const Modal_1 = __webpack_require__(946);
+class LoadingModal extends Modal_1.Modal {
+    constructor(title, options) {
+        const body = `
+            <div class="${constants_1.ns}-loading">
+                <div class="${constants_1.ns}-progress"></div>
+            </div>`;
+        super(title, body, options);
+        this.completed = false;
+        this.steps = [];
+        this.weight = 0;
+        this.progress = this.element.querySelector(`.${constants_1.ns}-progress`);
+    }
+    refreshProgress() {
+        switch (this.options && this.options.display) {
+            case 'count':
+                this.progress.textContent = `${this.steps.filter((s) => s.completed).length} / ${this.steps.length}`;
+                break;
+            case 'percentage':
+                this.progress.textContent = Math.floor(getCompletionRatio(this.steps) * 100) + '%';
+                break;
+        }
+    }
+}
+exports.LoadingModal = LoadingModal;
+// calculates the completion ratio from a tree of steps with weights and child steps
+function getCompletionRatio(steps) {
+    const totalWeight = steps.map((s) => s.weight).reduce((a, b) => a + b, 0);
+    if (totalWeight === 0)
+        return 0;
+    const completedWeight = steps.map((s) => s.weight * (s.completed ? 1 : getCompletionRatio(s.steps))).reduce((a, b) => a + b, 0);
+    return completedWeight / totalWeight;
+}
+
+
+/***/ },
+
+/***/ 946
+(__unused_webpack_module, exports) {
+
+"use strict";
+var __webpack_unused_export__;
+
+__webpack_unused_export__ = ({ value: true });
+exports.Modal = void 0;
+class Modal {
+    constructor(title, body, options) {
+        this.addedClass = false;
+        this.element = document.createElement('div');
+        this.options = options;
+        const fragment = modalTemplate.content.cloneNode(true);
+        const modalTitle = fragment.querySelector('.modal-title');
+        if (title instanceof Element) {
+            modalTitle.insertAdjacentElement('beforeend', title);
+        }
+        else {
+            modalTitle.insertAdjacentHTML('beforeend', title);
+        }
+        const modalBody = fragment.querySelector('.modal-body');
+        if (body instanceof Element) {
+            modalBody.insertAdjacentElement('beforeend', body);
+        }
+        else {
+            modalBody.insertAdjacentHTML('beforeend', body);
+        }
+        if (options && options.dismissible) {
+            // create X button that closes the modal
+            const closeButton = document.createElement('button');
+            closeButton.className = 'modal-dismiss sr-only';
+            closeButton.textContent = 'Close';
+            closeButton.addEventListener('click', () => this.hide());
+            // create modal actions div
+            const modalActions = document.createElement('div');
+            modalActions.className = 'modal-actions';
+            modalActions.appendChild(closeButton);
+            // append modal actions to modal content
+            const modalContent = fragment.querySelector('.modal-content');
+            modalContent.insertBefore(modalActions, modalContent.firstElementChild);
+            // close modal when user clicks outside modal
+            const popupWrapper = fragment.querySelector('.popup_wrapper');
+            popupWrapper.addEventListener('click', (event) => {
+                if (event.target instanceof Node && !modalContent.contains(event.target)) {
+                    this.hide();
+                }
+            });
+        }
+        this.element.appendChild(fragment);
+    }
+    get isAttached() {
+        return !!this.element.parentNode;
+    }
+    show() {
+        if (this.element.parentNode)
+            return;
+        document.body.appendChild(this.element);
+        if (!document.documentElement.classList.contains('popup_visible')) {
+            document.documentElement.classList.add('popup_visible');
+            this.addedClass = true;
+        }
+    }
+    hide() {
+        if (!this.element.parentNode)
+            return;
+        this.element.parentNode.removeChild(this.element);
+        if (this.addedClass) {
+            document.documentElement.classList.remove('popup_visible');
+            this.addedClass = false;
+        }
+        if (this.options && this.options.events && this.options.events.hide) {
+            this.options.events.hide();
+        }
+    }
+}
+exports.Modal = Modal;
+const modalTemplate = document.createElement('template');
+modalTemplate.innerHTML = `
+    <div class="popup_background"
+        style="opacity: 0.8; visibility: visible; background-color: rgb(0, 0, 0); position: fixed; top: 0px; right: 0px; bottom: 0px; left: 0px;">
+    </div>
+    <div class="popup_wrapper popup_wrapper_visible" style="opacity: 1; visibility: visible; position: fixed; overflow: auto; width: 100%; height: 100%; top: 0px; left: 0px; text-align: center;">
+        <div class="modal-dialog popup_content" role="dialog" aria-labelledby="modal-label" data-popup-initialized="true" aria-hidden="false" style="opacity: 1; visibility: visible; pointer-events: auto; display: inline-block; outline: none; text-align: left; position: relative; vertical-align: middle;" tabindex="-1">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <h2 class="modal-title"></h2>
+                </div>
+            </div>
+        </div>
+        <div class="popup_align" style="display: inline-block; vertical-align: middle; height: 100%;"></div>
+    </div>`;
+
+
+/***/ },
+
+/***/ 135
+(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+var __webpack_unused_export__;
+
+__webpack_unused_export__ = ({ value: true });
+__webpack_unused_export__ = delay;
+exports.encodeURIComponent2 = encodeURIComponent2;
+exports.fetchAndRetry = fetchAndRetry;
+const async_mutex_1 = __webpack_require__(693);
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+function encodeURIComponent2(uriComponent) {
+    return encodeURIComponent(uriComponent).replace(/%20/g, '+');
+}
+const semaphore = new async_mutex_1.Semaphore(6);
+let delayPromise = undefined;
+let delayTooManyRequestsMs = 10000;
+async function fetchAndRetry(url, init, callback) {
+    callback !== null && callback !== void 0 ? callback : (callback = async (response) => response);
+    return await semaphore.runExclusive(async () => {
+        var _a;
+        let delayResolver;
+        let delayRejecter;
+        try {
+            // eslint-disable-next-line no-constant-condition
+            for (let i = 0; true; i++) {
+                const response = await fetch(url, init);
+                if (response.ok) {
+                    const result = await callback(response, i);
+                    if (result !== undefined) {
+                        if (delayResolver !== undefined) {
+                            delayPromise = undefined;
+                            delayResolver();
+                        }
+                        return result;
+                    }
+                }
+                if (delayPromise === undefined) {
+                    delayPromise = new Promise((resolve, reject) => {
+                        delayResolver = resolve;
+                        delayRejecter = reject;
+                    });
+                    if (response.status === 429) { // Too Many Requests
+                        await delay(delayTooManyRequestsMs);
+                    }
+                    else {
+                        await delay(1000);
+                    }
+                }
+                else if (delayResolver !== undefined) {
+                    if (response.status === 429) { // Too Many Requests
+                        // retry after 10 seconds, then another 10 seconds, etc. up to 60 seconds, finally retry after every second.
+                        const additionalDelayMs = delayTooManyRequestsMs < 60000 ? 10000 : 1000;
+                        delayTooManyRequestsMs += additionalDelayMs;
+                        await delay(additionalDelayMs);
+                    }
+                    else if (i < 5) {
+                        // retry after 2 seconds, then 4 seconds, then 8, finally 16 (30 seconds total)
+                        await delay(Math.pow(2, i) * 1000);
+                    }
+                    else {
+                        throw (_a = response.statusText) !== null && _a !== void 0 ? _a : response.status.toString();
+                    }
+                }
+                else {
+                    await delayPromise;
+                }
+            }
+        }
+        catch (reason) {
+            if (delayRejecter !== undefined) {
+                delayRejecter(reason);
+            }
+            throw reason;
+        }
+    });
+}
+
+
+/***/ },
+
+/***/ 488
+(module) {
+
+"use strict";
+module.exports = he;
+
+/***/ },
+
+/***/ 635
+(__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   __addDisposableResource: () => (/* binding */ __addDisposableResource),
+/* harmony export */   __assign: () => (/* binding */ __assign),
+/* harmony export */   __asyncDelegator: () => (/* binding */ __asyncDelegator),
+/* harmony export */   __asyncGenerator: () => (/* binding */ __asyncGenerator),
+/* harmony export */   __asyncValues: () => (/* binding */ __asyncValues),
+/* harmony export */   __await: () => (/* binding */ __await),
+/* harmony export */   __awaiter: () => (/* binding */ __awaiter),
+/* harmony export */   __classPrivateFieldGet: () => (/* binding */ __classPrivateFieldGet),
+/* harmony export */   __classPrivateFieldIn: () => (/* binding */ __classPrivateFieldIn),
+/* harmony export */   __classPrivateFieldSet: () => (/* binding */ __classPrivateFieldSet),
+/* harmony export */   __createBinding: () => (/* binding */ __createBinding),
+/* harmony export */   __decorate: () => (/* binding */ __decorate),
+/* harmony export */   __disposeResources: () => (/* binding */ __disposeResources),
+/* harmony export */   __esDecorate: () => (/* binding */ __esDecorate),
+/* harmony export */   __exportStar: () => (/* binding */ __exportStar),
+/* harmony export */   __extends: () => (/* binding */ __extends),
+/* harmony export */   __generator: () => (/* binding */ __generator),
+/* harmony export */   __importDefault: () => (/* binding */ __importDefault),
+/* harmony export */   __importStar: () => (/* binding */ __importStar),
+/* harmony export */   __makeTemplateObject: () => (/* binding */ __makeTemplateObject),
+/* harmony export */   __metadata: () => (/* binding */ __metadata),
+/* harmony export */   __param: () => (/* binding */ __param),
+/* harmony export */   __propKey: () => (/* binding */ __propKey),
+/* harmony export */   __read: () => (/* binding */ __read),
+/* harmony export */   __rest: () => (/* binding */ __rest),
+/* harmony export */   __rewriteRelativeImportExtension: () => (/* binding */ __rewriteRelativeImportExtension),
+/* harmony export */   __runInitializers: () => (/* binding */ __runInitializers),
+/* harmony export */   __setFunctionName: () => (/* binding */ __setFunctionName),
+/* harmony export */   __spread: () => (/* binding */ __spread),
+/* harmony export */   __spreadArray: () => (/* binding */ __spreadArray),
+/* harmony export */   __spreadArrays: () => (/* binding */ __spreadArrays),
+/* harmony export */   __values: () => (/* binding */ __values),
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+/******************************************************************************
+Copyright (c) Microsoft Corporation.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+***************************************************************************** */
+/* global Reflect, Promise, SuppressedError, Symbol, Iterator */
+
+var extendStatics = function(d, b) {
+  extendStatics = Object.setPrototypeOf ||
+      ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+      function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+  return extendStatics(d, b);
+};
+
+function __extends(d, b) {
+  if (typeof b !== "function" && b !== null)
+      throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+  extendStatics(d, b);
+  function __() { this.constructor = d; }
+  d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+}
+
+var __assign = function() {
+  __assign = Object.assign || function __assign(t) {
+      for (var s, i = 1, n = arguments.length; i < n; i++) {
+          s = arguments[i];
+          for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p)) t[p] = s[p];
+      }
+      return t;
+  }
+  return __assign.apply(this, arguments);
+}
+
+function __rest(s, e) {
+  var t = {};
+  for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+      t[p] = s[p];
+  if (s != null && typeof Object.getOwnPropertySymbols === "function")
+      for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+          if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+              t[p[i]] = s[p[i]];
+      }
+  return t;
+}
+
+function __decorate(decorators, target, key, desc) {
+  var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+  if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+  else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+  return c > 3 && r && Object.defineProperty(target, key, r), r;
+}
+
+function __param(paramIndex, decorator) {
+  return function (target, key) { decorator(target, key, paramIndex); }
+}
+
+function __esDecorate(ctor, descriptorIn, decorators, contextIn, initializers, extraInitializers) {
+  function accept(f) { if (f !== void 0 && typeof f !== "function") throw new TypeError("Function expected"); return f; }
+  var kind = contextIn.kind, key = kind === "getter" ? "get" : kind === "setter" ? "set" : "value";
+  var target = !descriptorIn && ctor ? contextIn["static"] ? ctor : ctor.prototype : null;
+  var descriptor = descriptorIn || (target ? Object.getOwnPropertyDescriptor(target, contextIn.name) : {});
+  var _, done = false;
+  for (var i = decorators.length - 1; i >= 0; i--) {
+      var context = {};
+      for (var p in contextIn) context[p] = p === "access" ? {} : contextIn[p];
+      for (var p in contextIn.access) context.access[p] = contextIn.access[p];
+      context.addInitializer = function (f) { if (done) throw new TypeError("Cannot add initializers after decoration has completed"); extraInitializers.push(accept(f || null)); };
+      var result = (0, decorators[i])(kind === "accessor" ? { get: descriptor.get, set: descriptor.set } : descriptor[key], context);
+      if (kind === "accessor") {
+          if (result === void 0) continue;
+          if (result === null || typeof result !== "object") throw new TypeError("Object expected");
+          if (_ = accept(result.get)) descriptor.get = _;
+          if (_ = accept(result.set)) descriptor.set = _;
+          if (_ = accept(result.init)) initializers.unshift(_);
+      }
+      else if (_ = accept(result)) {
+          if (kind === "field") initializers.unshift(_);
+          else descriptor[key] = _;
+      }
+  }
+  if (target) Object.defineProperty(target, contextIn.name, descriptor);
+  done = true;
+};
+
+function __runInitializers(thisArg, initializers, value) {
+  var useValue = arguments.length > 2;
+  for (var i = 0; i < initializers.length; i++) {
+      value = useValue ? initializers[i].call(thisArg, value) : initializers[i].call(thisArg);
+  }
+  return useValue ? value : void 0;
+};
+
+function __propKey(x) {
+  return typeof x === "symbol" ? x : "".concat(x);
+};
+
+function __setFunctionName(f, name, prefix) {
+  if (typeof name === "symbol") name = name.description ? "[".concat(name.description, "]") : "";
+  return Object.defineProperty(f, "name", { configurable: true, value: prefix ? "".concat(prefix, " ", name) : name });
+};
+
+function __metadata(metadataKey, metadataValue) {
+  if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(metadataKey, metadataValue);
+}
+
+function __awaiter(thisArg, _arguments, P, generator) {
+  function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+  return new (P || (P = Promise))(function (resolve, reject) {
+      function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+      function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+      function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+      step((generator = generator.apply(thisArg, _arguments || [])).next());
+  });
+}
+
+function __generator(thisArg, body) {
+  var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
+  return g.next = verb(0), g["throw"] = verb(1), g["return"] = verb(2), typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+  function verb(n) { return function (v) { return step([n, v]); }; }
+  function step(op) {
+      if (f) throw new TypeError("Generator is already executing.");
+      while (g && (g = 0, op[0] && (_ = 0)), _) try {
+          if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+          if (y = 0, t) op = [op[0] & 2, t.value];
+          switch (op[0]) {
+              case 0: case 1: t = op; break;
+              case 4: _.label++; return { value: op[1], done: false };
+              case 5: _.label++; y = op[1]; op = [0]; continue;
+              case 7: op = _.ops.pop(); _.trys.pop(); continue;
+              default:
+                  if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                  if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                  if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                  if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                  if (t[2]) _.ops.pop();
+                  _.trys.pop(); continue;
+          }
+          op = body.call(thisArg, _);
+      } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+      if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+  }
+}
+
+var __createBinding = Object.create ? (function(o, m, k, k2) {
+  if (k2 === undefined) k2 = k;
+  var desc = Object.getOwnPropertyDescriptor(m, k);
+  if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+  }
+  Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+  if (k2 === undefined) k2 = k;
+  o[k2] = m[k];
+});
+
+function __exportStar(m, o) {
+  for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(o, p)) __createBinding(o, m, p);
+}
+
+function __values(o) {
+  var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
+  if (m) return m.call(o);
+  if (o && typeof o.length === "number") return {
+      next: function () {
+          if (o && i >= o.length) o = void 0;
+          return { value: o && o[i++], done: !o };
+      }
+  };
+  throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
+}
+
+function __read(o, n) {
+  var m = typeof Symbol === "function" && o[Symbol.iterator];
+  if (!m) return o;
+  var i = m.call(o), r, ar = [], e;
+  try {
+      while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
+  }
+  catch (error) { e = { error: error }; }
+  finally {
+      try {
+          if (r && !r.done && (m = i["return"])) m.call(i);
+      }
+      finally { if (e) throw e.error; }
+  }
+  return ar;
+}
+
+/** @deprecated */
+function __spread() {
+  for (var ar = [], i = 0; i < arguments.length; i++)
+      ar = ar.concat(__read(arguments[i]));
+  return ar;
+}
+
+/** @deprecated */
+function __spreadArrays() {
+  for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+  for (var r = Array(s), k = 0, i = 0; i < il; i++)
+      for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+          r[k] = a[j];
+  return r;
+}
+
+function __spreadArray(to, from, pack) {
+  if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+      if (ar || !(i in from)) {
+          if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+          ar[i] = from[i];
+      }
+  }
+  return to.concat(ar || Array.prototype.slice.call(from));
+}
+
+function __await(v) {
+  return this instanceof __await ? (this.v = v, this) : new __await(v);
+}
+
+function __asyncGenerator(thisArg, _arguments, generator) {
+  if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+  var g = generator.apply(thisArg, _arguments || []), i, q = [];
+  return i = Object.create((typeof AsyncIterator === "function" ? AsyncIterator : Object).prototype), verb("next"), verb("throw"), verb("return", awaitReturn), i[Symbol.asyncIterator] = function () { return this; }, i;
+  function awaitReturn(f) { return function (v) { return Promise.resolve(v).then(f, reject); }; }
+  function verb(n, f) { if (g[n]) { i[n] = function (v) { return new Promise(function (a, b) { q.push([n, v, a, b]) > 1 || resume(n, v); }); }; if (f) i[n] = f(i[n]); } }
+  function resume(n, v) { try { step(g[n](v)); } catch (e) { settle(q[0][3], e); } }
+  function step(r) { r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject) : settle(q[0][2], r); }
+  function fulfill(value) { resume("next", value); }
+  function reject(value) { resume("throw", value); }
+  function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
+}
+
+function __asyncDelegator(o) {
+  var i, p;
+  return i = {}, verb("next"), verb("throw", function (e) { throw e; }), verb("return"), i[Symbol.iterator] = function () { return this; }, i;
+  function verb(n, f) { i[n] = o[n] ? function (v) { return (p = !p) ? { value: __await(o[n](v)), done: false } : f ? f(v) : v; } : f; }
+}
+
+function __asyncValues(o) {
+  if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+  var m = o[Symbol.asyncIterator], i;
+  return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+  function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+  function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+}
+
+function __makeTemplateObject(cooked, raw) {
+  if (Object.defineProperty) { Object.defineProperty(cooked, "raw", { value: raw }); } else { cooked.raw = raw; }
+  return cooked;
+};
+
+var __setModuleDefault = Object.create ? (function(o, v) {
+  Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+  o["default"] = v;
+};
+
+var ownKeys = function(o) {
+  ownKeys = Object.getOwnPropertyNames || function (o) {
+    var ar = [];
+    for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+    return ar;
+  };
+  return ownKeys(o);
+};
+
+function __importStar(mod) {
+  if (mod && mod.__esModule) return mod;
+  var result = {};
+  if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+  __setModuleDefault(result, mod);
+  return result;
+}
+
+function __importDefault(mod) {
+  return (mod && mod.__esModule) ? mod : { default: mod };
+}
+
+function __classPrivateFieldGet(receiver, state, kind, f) {
+  if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
+  if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
+  return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
+}
+
+function __classPrivateFieldSet(receiver, state, value, kind, f) {
+  if (kind === "m") throw new TypeError("Private method is not writable");
+  if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a setter");
+  if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
+  return (kind === "a" ? f.call(receiver, value) : f ? f.value = value : state.set(receiver, value)), value;
+}
+
+function __classPrivateFieldIn(state, receiver) {
+  if (receiver === null || (typeof receiver !== "object" && typeof receiver !== "function")) throw new TypeError("Cannot use 'in' operator on non-object");
+  return typeof state === "function" ? receiver === state : state.has(receiver);
+}
+
+function __addDisposableResource(env, value, async) {
+  if (value !== null && value !== void 0) {
+    if (typeof value !== "object" && typeof value !== "function") throw new TypeError("Object expected.");
+    var dispose, inner;
+    if (async) {
+      if (!Symbol.asyncDispose) throw new TypeError("Symbol.asyncDispose is not defined.");
+      dispose = value[Symbol.asyncDispose];
+    }
+    if (dispose === void 0) {
+      if (!Symbol.dispose) throw new TypeError("Symbol.dispose is not defined.");
+      dispose = value[Symbol.dispose];
+      if (async) inner = dispose;
+    }
+    if (typeof dispose !== "function") throw new TypeError("Object not disposable.");
+    if (inner) dispose = function() { try { inner.call(this); } catch (e) { return Promise.reject(e); } };
+    env.stack.push({ value: value, dispose: dispose, async: async });
+  }
+  else if (async) {
+    env.stack.push({ async: true });
+  }
+  return value;
+}
+
+var _SuppressedError = typeof SuppressedError === "function" ? SuppressedError : function (error, suppressed, message) {
+  var e = new Error(message);
+  return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
+};
+
+function __disposeResources(env) {
+  function fail(e) {
+    env.error = env.hasError ? new _SuppressedError(e, env.error, "An error was suppressed during disposal.") : e;
+    env.hasError = true;
+  }
+  var r, s = 0;
+  function next() {
+    while (r = env.stack.pop()) {
+      try {
+        if (!r.async && s === 1) return s = 0, env.stack.push(r), Promise.resolve().then(next);
+        if (r.dispose) {
+          var result = r.dispose.call(r.value);
+          if (r.async) return s |= 2, Promise.resolve(result).then(next, function(e) { fail(e); return next(); });
+        }
+        else s |= 1;
+      }
+      catch (e) {
+        fail(e);
+      }
+    }
+    if (s === 1) return env.hasError ? Promise.reject(env.error) : Promise.resolve();
+    if (env.hasError) throw env.error;
+  }
+  return next();
+}
+
+function __rewriteRelativeImportExtension(path, preserveJsx) {
+  if (typeof path === "string" && /^\.\.?\//.test(path)) {
+      return path.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function (m, tsx, d, ext, cm) {
+          return tsx ? preserveJsx ? ".jsx" : ".js" : d && (!ext || !cm) ? m : (d + ext + "." + cm.toLowerCase() + "js");
+      });
+  }
+  return path;
+}
+
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
+  __extends,
+  __assign,
+  __rest,
+  __decorate,
+  __param,
+  __esDecorate,
+  __runInitializers,
+  __propKey,
+  __setFunctionName,
+  __metadata,
+  __awaiter,
+  __generator,
+  __createBinding,
+  __exportStar,
+  __values,
+  __read,
+  __spread,
+  __spreadArrays,
+  __spreadArray,
+  __await,
+  __asyncGenerator,
+  __asyncDelegator,
+  __asyncValues,
+  __makeTemplateObject,
+  __importStar,
+  __importDefault,
+  __classPrivateFieldGet,
+  __classPrivateFieldSet,
+  __classPrivateFieldIn,
+  __addDisposableResource,
+  __disposeResources,
+  __rewriteRelativeImportExtension,
+});
+
+
+/***/ }
+
+/******/ 	});
+/************************************************************************/
+/******/ 	// The module cache
+/******/ 	var __webpack_module_cache__ = {};
+/******/ 	
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/ 		// Check if module is in cache
+/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		if (cachedModule !== undefined) {
+/******/ 			return cachedModule.exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 			// no module.id needed
+/******/ 			// no module.loaded needed
+/******/ 			exports: {}
+/******/ 		};
+/******/ 	
+/******/ 		// Execute the module function
+/******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/ 	
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/ 	
+/************************************************************************/
+/******/ 	/* webpack/runtime/define property getters */
+/******/ 	(() => {
+/******/ 		// define getter functions for harmony exports
+/******/ 		__webpack_require__.d = (exports, definition) => {
+/******/ 			for(var key in definition) {
+/******/ 				if(__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) {
+/******/ 					Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 				}
+/******/ 			}
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/hasOwnProperty shorthand */
+/******/ 	(() => {
+/******/ 		__webpack_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/make namespace object */
+/******/ 	(() => {
+/******/ 		// define __esModule on exports
+/******/ 		__webpack_require__.r = (exports) => {
+/******/ 			if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+/******/ 				Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+/******/ 			}
+/******/ 			Object.defineProperty(exports, '__esModule', { value: true });
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/************************************************************************/
+var __webpack_exports__ = {};
+// This entry needs to be wrapped in an IIFE because it needs to be in strict mode.
+(() => {
+"use strict";
+var exports = __webpack_exports__;
+var __webpack_unused_export__;
+
+__webpack_unused_export__ = ({ value: true });
+const constants_1 = __webpack_require__(921);
+const advanced_bulk_edit_1 = __webpack_require__(556);
+const create_timestamp_links_1 = __webpack_require__(641);
+const display_album_name_1 = __webpack_require__(308);
+const enhance_automatic_edits_page_1 = __webpack_require__(252);
+initialize();
+function initialize() {
+    appendStyle();
+    (0, advanced_bulk_edit_1.appendBulkEditScrobblesHeaderLinkAndMenuItems)(document.body);
+    (0, create_timestamp_links_1.createTimestampLinks)(document.body);
+    (0, display_album_name_1.displayAlbumName)(document.body);
+    (0, enhance_automatic_edits_page_1.enhanceAutomaticEditsPage)(document.body);
+    // use MutationObserver because Last.fm is a single-page application
+    const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+                if (node instanceof Element) {
+                    if (node.hasAttribute('data-processed')) {
+                        continue;
+                    }
+                    node.setAttribute('data-processed', 'true');
+                    (0, advanced_bulk_edit_1.appendBulkEditScrobblesHeaderLinkAndMenuItems)(node);
+                    (0, create_timestamp_links_1.createTimestampLinks)(node);
+                    (0, display_album_name_1.displayAlbumName)(node);
+                    (0, enhance_automatic_edits_page_1.enhanceAutomaticEditsPage)(node);
+                }
+            }
+        }
+    });
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+    });
+}
+function appendStyle() {
+    const style = document.createElement('style');
+    style.innerHTML = `
+        .${constants_1.ns}-title[title] {
+            cursor: help !important;
+        }
+
+        @media (pointer: coarse), (hover: none) {
+            .${constants_1.ns}-title[title]:focus {
+                position: relative;
+                display: inline-flex;
+                justify-content: center;
+            }
+
+            .${constants_1.ns}-title[title]:focus::after {
+                content: attr(title);
+                position: absolute;
+                top: 100%;
+                left: 0%;
+                color: #fff;
+                background-color: #2b2a32;
+                border: 1px solid #fff;
+                width: fit-content;
+                padding: 4px 7px;
+                font-size: small;
+                line-height: normal;
+                white-space: pre;
+                z-index: 1;
+            }
+        }
+
+        .${constants_1.ns}-collapse-list {
+            margin-top: 0;
+            padding: 6px 0;
+            border: 2px solid #eee;
+            border-radius: 3px;
+        }
+
+        .${constants_1.ns}-collapse-list-item {
+            display: flex;
+        }
+
+        .${constants_1.ns}-collapse-original-field {
+            padding: 0 12px;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .${constants_1.ns}-collapse-list-item input {
+            margin: 0 !important;
+            padding: 0 12px !important;
+            height: 24px !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+
+        .${constants_1.ns}-ellipsis {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .${constants_1.ns}-form-group-controls {
+            margin-left: 0 !important;
+        }
+
+        .${constants_1.ns}-list {
+            column-count: 2;
+        }
+
+        .${constants_1.ns}-loading {
+            background: url("/static/images/loading_dark_light_64.gif") 50% 50% no-repeat;
+            height: 64px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .${constants_1.ns}-text-danger {
+            color: #d92323;
+        }
+
+        .${constants_1.ns}-text-info {
+            color: #2b65d9;
+        }
+
+        @media (min-width: 768px) {
+            .${constants_1.ns}-chartlist-scrobbles .chartlist-name {
+                margin-top: -2px;
+                margin-bottom: 13px;
+            }
+
+            .${constants_1.ns}-chartlist-scrobbles .chartlist-album {
+                margin-top: 13px;
+                margin-bottom: -2px;
+                position: absolute;
+                left: 133.5px;
+                width: 182.41px;
+            }
+
+            .${constants_1.ns}-chartlist-scrobbles .chartlist-album::before {
+                width: 0 !important;
+            }
+        }
+
+        @media (min-width: 1260px) {
+            .${constants_1.ns}-chartlist-scrobbles .chartlist-album {
+                width: 272.41px;
+            }
+        }
+
+        .${constants_1.ns}-highlight {
+            background-color: #fff9e5;
+        }
+
+        .${constants_1.ns}-highlight:hover {
+            background-color: #fcf2cf !important;
+        }`;
+    document.head.appendChild(style);
+}
+
+})();
+
+/******/ })()
+;
